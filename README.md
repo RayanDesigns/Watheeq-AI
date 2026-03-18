@@ -2,6 +2,15 @@
 
 A web app for insurance claims with three portals: **Claimant**, **Claims Examiner**, and **Admin**. Built with Next.js, FastAPI, Firebase, and Authintica SMS for OTP.
 
+## Do Not Commit
+
+Anything downloadable or generated should **not** be committed. Run `npm install` and `pip install` after cloning. The `.gitignore` excludes:
+
+- `node_modules/` (frontend dependencies)
+- `venv/`, `.venv/` (Python virtual env)
+- `.env`, `.env.local` (secrets)
+- `.next/`, `dist/`, `build/` (build outputs)
+
 ## Prerequisites
 
 - **Node.js** 18+ and npm
@@ -113,4 +122,3 @@ Backend: [http://localhost:8000](http://localhost:8000)
 ## Docs
 
 - [Architecture](shared/docs/architecture.md)
-- [Cursor project guide](.cursor/rules/watheeq-project.mdc)
