@@ -112,13 +112,14 @@ export default function AdminDashboard() {
             </p>
           </Link>
 
-          {/* Placeholder for future cards */}
-          <div
-            className="rounded-2xl border p-6 opacity-50"
+          {/* Policy Plans card */}
+          <Link
+            href="/dashboard/admin/policies"
+            className="group rounded-2xl border p-6 transition-all hover:shadow-md hover:border-blue-200"
             style={{ borderColor: "#e2e2ee", background: "#fff", boxShadow: "0 1px 3px rgba(5,5,8,0.05)" }}
           >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: "#f0f0f5" }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(5,5,8,0.3)" strokeWidth="1.75" strokeLinecap="round">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: "rgba(0,4,232,0.08)" }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0004E8" strokeWidth="1.75" strokeLinecap="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
                 <line x1="16" y1="13" x2="8" y2="13"/>
@@ -126,9 +127,13 @@ export default function AdminDashboard() {
                 <polyline points="10 9 9 9 8 9"/>
               </svg>
             </div>
-            <h3 className="font-bold text-base mb-1" style={{ color: "#050508" }}>Claims Management</h3>
-            <p className="text-sm" style={{ color: "rgba(5,5,8,0.45)" }}>Coming soon.</p>
-          </div>
+            <h3 className="font-bold text-base mb-1 group-hover:text-blue-700 transition-colors" style={{ color: "#050508" }}>
+              Policy Plans
+            </h3>
+            <p className="text-sm" style={{ color: "rgba(5,5,8,0.45)" }}>
+              Upload and manage insurance policy plan documents.
+            </p>
+          </Link>
         </div>
       </main>
     </div>

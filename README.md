@@ -17,6 +17,7 @@ Anything downloadable or generated should **not** be committed. Run `npm install
 - **Python** 3.10+
 - **Firebase** project ([console.firebase.google.com](https://console.firebase.google.com))
 - **Authintica** account for SMS OTP ([authentica.sa](https://authentica.sa))
+- **Cloudinary** account for file storage ([cloudinary.com](https://cloudinary.com))
 
 ## Project Structure
 
@@ -97,7 +98,14 @@ EMAIL_FROM=your-email@gmail.com
 
 # Public app URL (used in email links)
 APP_URL=http://localhost:3000
+
+# Cloudinary (file storage for policy PDFs and future documents)
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
 ```
+
+> **Cloudinary setup**: Create an account at [cloudinary.com](https://cloudinary.com). Find your credentials in the Dashboard. In **Settings → Security**, enable **PDF and ZIP files delivery** otherwise PDF downloads will be blocked.
 
 > **Gmail app password**: Go to Google Account → Security → 2-Step Verification → App passwords. Generate a password for "Mail" and use it as `SMTP_PASSWORD`. Do NOT use your regular Gmail password.
 
@@ -136,6 +144,9 @@ Backend: [http://localhost:8000](http://localhost:8000)
 | `FIREBASE_CLIENT_EMAIL` | backend/.env | Service account email |
 | `AUTHINTICA_API_KEY` | backend/.env | Authintica SMS API key |
 | `AUTHINTICA_API_URL` | backend/.env | Authintica API endpoint |
+| `CLOUDINARY_CLOUD_NAME` | backend/.env | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | backend/.env | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | backend/.env | Cloudinary API secret |
 
 ## Docs
 

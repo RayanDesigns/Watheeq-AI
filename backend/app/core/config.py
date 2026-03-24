@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     EMAIL_FROM: str = ""
 
+    # Cloudinary — file storage (PDFs, images, documents)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # Public app URL — used in email links
     APP_URL: str = "http://localhost:3000"
 
