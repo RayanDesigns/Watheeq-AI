@@ -25,6 +25,11 @@ build/
 *.env
 .env.example
 
+# Claude Code installer artifacts
+cd
+claude
+install.cmd
+
 # IDE and OS
 .idea/
 .vscode/
