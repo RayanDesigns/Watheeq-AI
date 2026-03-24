@@ -1,1 +1,18 @@
-// TODO: Firestore security rules - restrict by role (claimant, examiner, admin)
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can read their own profile document.
+    // The document ID equals the Firebase Auth uid (e.g. "phone_9665XXXXXXXX").
+    // Only the backend (Admin SDK) can write — Admin SDK bypasses these rules.
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // Block everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

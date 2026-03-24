@@ -1,4 +1,5 @@
-// TODO: Landing page - intro, links to claimant / examiner / admin portals
+import { redirect } from "next/navigation";
+
 export default function Home() {
-  return <main></main>;
+  redirect("/login");
 }

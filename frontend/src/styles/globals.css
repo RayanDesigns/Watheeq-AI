@@ -1,4 +1,101 @@
-/* TODO: Global styles - Tailwind directives, CSS variables, base styles */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --text: #050508;
+  --background: #fafafd;
+  --primary: #0004E8;
+  --secondary: #8e8fe6;
+  --accent: #4a4de9;
+  --border: #e2e2ee;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--text);
+  background: var(--background);
+}
+
+::selection {
+  background: rgba(0, 4, 232, 0.15);
+  color: var(--text);
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--background);
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #d5d5ff;
+  border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  .section-container {
+    @apply mx-auto px-6 lg:px-8;
+    max-width: 1120px;
+  }
+
+  .section-padding {
+    @apply py-20 lg:py-28;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl border;
+    border-color: var(--border);
+    box-shadow: 0 1px 3px rgba(5, 5, 8, 0.05), 0 4px 12px rgba(5, 5, 8, 0.03);
+  }
+
+  .card-hover {
+    @apply transition-all duration-300;
+  }
+  .card-hover:hover {
+    @apply -translate-y-1;
+    border-color: rgba(0, 4, 232, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 4, 232, 0.08), 0 12px 32px rgba(5, 5, 8, 0.06);
+  }
+
+  .badge-label {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase;
+  }
+
+  .section-eyebrow {
+    @apply text-sm font-semibold uppercase;
+    color: var(--primary);
+    letter-spacing: 0.15em;
+  }
+
+  .section-heading {
+    @apply text-3xl font-bold leading-tight mt-3 mb-4;
+    color: var(--text);
+  }
+
+  .section-subheading {
+    @apply text-base max-w-2xl leading-relaxed;
+    color: rgba(5, 5, 8, 0.55);
+  }
+}
+
+@media (min-width: 1024px) {
+  .section-heading {
+    font-size: 2.75rem;
+  }
+  .section-subheading {
+    font-size: 1.125rem;
+  }
+}
