@@ -6,6 +6,60 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetchAuth } from "@/lib/apiClient";
 
+function MedicalReportDownloadButton({ claimId, patientName, user }: { claimId: string; patientName: string; user: unknown }) {
+  const [loading, setDlLoading] = useState(false);
+  const [error, setDlError] = useState("");
+
+  const handleDownload = async () => {
+    setDlLoading(true);
+    setDlError("");
+    try {
+      const res = await apiFetchAuth(`/api/claims/${claimId}/download-medical-report`, user as Parameters<typeof apiFetchAuth>[1]);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Download failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${patientName}-Medical-Report.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDlError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDlLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        onClick={handleDownload}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all hover:opacity-80 disabled:opacity-50"
+        style={{ background: "rgba(0,4,232,0.08)", color: "#0004E8" }}
+      >
+        {loading ? (
+          <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" style={{ color: "#0004E8" }}>
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        ) : (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        )}
+        {loading ? "Downloading..." : "Download Report"}
+      </button>
+      {error && <p className="text-[11px] mt-1" style={{ color: "#dc2626" }}>{error}</p>}
+    </div>
+  );
+}
+
 type ClaimStatus = "submitted" | "under review" | "approved" | "rejected" | "cancelled";
 type Decision = "approved" | "rejected";
 
@@ -231,10 +285,11 @@ export default function ExaminerClaimDetailPage() {
                   {claim.medicalReport && (
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-widest mb-1" style={{ color: "rgba(5,5,8,0.35)" }}>Medical Report</p>
-                      <a href={claim.medicalReport} target="_blank" rel="noopener noreferrer"
-                        className="text-[14px] font-medium underline underline-offset-2 transition-opacity hover:opacity-70" style={{ color: "#0004E8" }}>
-                        View Report ↗
-                      </a>
+                      <MedicalReportDownloadButton
+                        claimId={claim.claimId}
+                        patientName={`${claim.patientFName}-${claim.patientLName}`}
+                        user={user}
+                      />
                     </div>
                   )}
                   {claim.supportingDocuments && (
@@ -318,8 +373,8 @@ export default function ExaminerClaimDetailPage() {
               {pendingDecision === "approved"
                 ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.2"><path d="M20 6L9 17l-5-5" /></svg>
                 : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.2">
-                    <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-                  </svg>
+                  <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
               }
             </div>
             <h3 className="text-[17px] font-bold mb-2" style={{ color: "#050508" }}>

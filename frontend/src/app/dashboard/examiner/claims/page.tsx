@@ -260,8 +260,8 @@ export default function ExaminerClaimsPage() {
               {activeTab === "submitted"
                 ? "No submitted claims waiting for review."
                 : activeTab === "under review"
-                ? "You have no claims currently under your review."
-                : `No ${activeTab} claims to show.`}
+                  ? "You have no claims currently under your review."
+                  : `No ${activeTab} claims to show.`}
             </p>
           </motion.div>
         )}

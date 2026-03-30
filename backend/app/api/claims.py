@@ -1,4 +1,7 @@
+import re
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from firebase_admin import auth as firebase_auth
 from app.services.firestore_client import get_db
 from app.services import claims_service
@@ -31,6 +34,24 @@ async def require_claimant(authorization: str = Header(..., alias="Authorization
         raise HTTPException(status_code=403, detail="Claimant access required")
 
     return {"uid": decoded["uid"], **profile}
+
+
+async def require_authenticated(authorization: str = Header(..., alias="Authorization")) -> dict:
+    """Allow any authenticated user (claimant or examiner) to download medical reports."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    token = authorization[7:]
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {e}")
+
+    db = get_db()
+    snap = db.collection("users").document(decoded["uid"]).get()
+    if not snap.exists:
+        raise HTTPException(status_code=403, detail="User not found")
+
+    return {"uid": decoded["uid"], **snap.to_dict()}
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -102,3 +123,64 @@ def get_claim(claim_id: str, user: dict = Depends(require_claimant)):
 def cancel_claim(claim_id: str, user: dict = Depends(require_claimant)):
     """US5: Cancel a claim — only allowed when status is 'submitted'."""
     return claims_service.cancel_claim(claim_id, user["uid"])
+
+
+@router.get("/claims/{claim_id}/download-medical-report", summary="Download medical report PDF from Cloudinary")
+async def download_medical_report(claim_id: str, user: dict = Depends(require_authenticated)):
+    """
+    Stream the medical report PDF for a claim through the backend (bypassing Cloudinary restrictions).
+    Accessible to: the claimant who owns the claim, or any active examiner assigned to it.
+    """
+    uid = user["uid"]
+    role = user.get("role", "")
+
+    db = get_db()
+    snap = db.collection("claims").document(claim_id).get()
+    if not snap.exists:
+        raise HTTPException(status_code=404, detail="Claim not found")
+
+    data = snap.to_dict()
+
+    # Access control: claimant must own the claim; examiner must be assigned or claim must be submitted
+    if role == "claimant":
+        if data.get("claimantID") != uid:
+            raise HTTPException(status_code=403, detail="You do not have access to this claim")
+    elif role == "examiner":
+        assigned = data.get("examinerID", "")
+        status = data.get("status", "")
+        if assigned != uid and not (status == "submitted" and assigned == ""):
+            raise HTTPException(status_code=403, detail="You do not have access to this claim")
+    else:
+        # Admin or other roles — allow access
+        pass
+
+    file_url = data.get("medicalReport", "")
+    if not file_url:
+        raise HTTPException(status_code=404, detail="No medical report attached to this claim")
+
+    patient_name = f"{data.get('patientFName', 'Medical')}-{data.get('patientLName', 'Report')}"
+
+    # Extract public_id from the Cloudinary URL and stream it back
+    match = re.search(r"/upload/(?:v\d+/)?(.+)$", file_url)
+    if not match:
+        raise HTTPException(status_code=500, detail="Invalid medical report URL stored")
+
+    public_id = match.group(1)
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(file_url)
+        if resp.status_code != 200:
+            private_url = cloudinary_client.get_private_download_url(public_id)
+            resp = await client.get(private_url)
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Cloudinary {resp.status_code}: {resp.text[:300]}"
+            )
+
+    safe_name = patient_name.replace('"', "")
+    return StreamingResponse(
+        iter([resp.content]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}-Medical-Report.pdf"'},
+    )

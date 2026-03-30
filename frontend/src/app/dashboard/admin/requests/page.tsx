@@ -21,9 +21,9 @@ interface ExaminerRequest {
 }
 
 const STATUS_STYLES: Record<Status, { bg: string; text: string; label: string }> = {
-  pending:  { bg: "rgba(234,179,8,0.1)",   text: "#b45309", label: "Pending"  },
-  approved: { bg: "rgba(34,197,94,0.1)",   text: "#15803d", label: "Approved" },
-  rejected: { bg: "rgba(239,68,68,0.1)",   text: "#dc2626", label: "Rejected" },
+  pending: { bg: "rgba(234,179,8,0.1)", text: "#b45309", label: "Pending" },
+  approved: { bg: "rgba(34,197,94,0.1)", text: "#15803d", label: "Approved" },
+  rejected: { bg: "rgba(239,68,68,0.1)", text: "#dc2626", label: "Rejected" },
 };
 
 function formatDate(iso: string) {
@@ -145,8 +145,8 @@ export default function ExaminerRequestsPage() {
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               {toast.ok
-                ? <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>
-                : <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>
+                ? <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></>
+                : <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
               }
             </svg>
             {toast.msg}
@@ -196,7 +196,7 @@ export default function ExaminerRequestsPage() {
             style={{ borderColor: "#e2e2ee", color: "rgba(5,5,8,0.55)" }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
             </svg>
             Refresh
           </button>
@@ -233,8 +233,8 @@ export default function ExaminerRequestsPage() {
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: "rgba(0,4,232,0.06)" }}>
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0004E8" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
                 </svg>
               </div>
               <p className="font-semibold" style={{ color: "#050508" }}>No requests found</p>
@@ -304,12 +304,12 @@ export default function ExaminerRequestsPage() {
                             >
                               {actionLoading === req.id + "approve" ? (
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
                               ) : (
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                                  <polyline points="20 6 9 17 4 12"/>
+                                  <polyline points="20 6 9 17 4 12" />
                                 </svg>
                               )}
                               Approve
@@ -322,12 +322,12 @@ export default function ExaminerRequestsPage() {
                             >
                               {actionLoading === req.id + "reject" ? (
                                 <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                 </svg>
                               ) : (
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                                 </svg>
                               )}
                               Reject
