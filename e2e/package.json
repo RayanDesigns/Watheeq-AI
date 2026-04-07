@@ -1,0 +1,24 @@
+{
+  "name": "watheeq-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end tests for Watheeq AI platform",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:smoke": "npx playwright test --project=smoke",
+    "test:chromium": "npx playwright test --project=chromium",
+    "test:firefox": "npx playwright test --project=firefox",
+    "test:mobile": "npx playwright test --project=mobile-chrome",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:ui": "npx playwright test --ui",
+    "report": "npx playwright show-report playwright-report",
+    "codegen": "npx playwright codegen http://localhost:3000",
+    "install:browsers": "npx playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
