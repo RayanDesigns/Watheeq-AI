@@ -13,6 +13,8 @@ export interface TestEnv {
   ADMIN_PASSWORD: string;
   TEST_PHONE_CLAIMANT: string;
   TEST_PHONE_EXAMINER: string;
+  TEST_PHONE_EXAMINER_2: string;
+  TEST_OTP_CODE: string;
 }
 
 let cachedEnv: TestEnv | null = null;
@@ -48,6 +50,8 @@ export function getTestEnv(): TestEnv {
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? "Admin@1234",
     TEST_PHONE_CLAIMANT: process.env.TEST_PHONE_CLAIMANT ?? "+966500000001",
     TEST_PHONE_EXAMINER: process.env.TEST_PHONE_EXAMINER ?? "+966500000002",
+    TEST_PHONE_EXAMINER_2: process.env.TEST_PHONE_EXAMINER_2 ?? "+966500000003",
+    TEST_OTP_CODE: process.env.TEST_OTP_CODE ?? "1234",
   };
 
   return cachedEnv;

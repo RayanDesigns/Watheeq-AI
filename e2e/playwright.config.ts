@@ -39,10 +39,45 @@ export default defineConfig({
   globalTeardown: path.resolve(__dirname, "global-teardown.ts"),
 
   projects: [
+    /* ── Setup ────────────────────────────────────────────────── */
     {
       name: "setup",
       testMatch: /auth\.setup\.ts/,
     },
+
+    /* ── Sprint-scoped projects ───────────────────────────────── */
+    {
+      name: "sprint1",
+      testDir: "./tests/sprint1",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+    {
+      name: "sprint2",
+      testDir: "./tests/sprint2",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+    {
+      name: "sprint3",
+      testDir: "./tests/sprint3",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+    {
+      name: "sprint4",
+      testDir: "./tests/sprint4",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+    {
+      name: "cross-sprint",
+      testDir: "./tests/cross-sprint",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+
+    /* ── Browser matrix (full regression) ─────────────────────── */
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
@@ -58,9 +93,17 @@ export default defineConfig({
       use: { ...devices["Pixel 5"] },
       dependencies: ["setup"],
     },
+
+    /* ── Tier-scoped projects ─────────────────────────────────── */
     {
       name: "smoke",
-      testMatch: /.*\.smoke\.spec\.ts/,
+      grep: /@smoke/,
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"],
+    },
+    {
+      name: "release",
+      grep: /@release/,
       use: { ...devices["Desktop Chrome"] },
       dependencies: ["setup"],
     },

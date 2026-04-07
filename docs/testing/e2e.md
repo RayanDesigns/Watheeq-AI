@@ -2,23 +2,23 @@
 
 ## Overview
 
-The E2E test suite uses **Playwright** with **TypeScript** to verify all user-facing workflows across the Watheeq insurance claims platform. Tests cover three personas: **Claimant**, **Claims Examiner**, and **Admin**.
+The E2E test suite uses **Playwright** with **TypeScript** to verify all user-facing workflows across the Watheeq insurance claims platform. Tests are organized by **sprint** to mirror the Project Release Road-map, covering three personas: **Claimant**, **Claims Examiner**, and **Admin**.
 
 ## Architecture
 
 ```
 e2e/
-├── playwright.config.ts        # Playwright configuration
+├── playwright.config.ts        # Playwright configuration (sprint + browser + tag projects)
 ├── auth.setup.ts               # Project setup: creates `.auth/admin.json` after servers are up
 ├── global-teardown.ts          # Post-test cleanup
-├── package.json                # E2E-specific dependencies
+├── package.json                # E2E-specific dependencies and sprint scripts
 ├── tsconfig.json               # TypeScript config for E2E
-├── .env.test.example           # Environment variable template (copy to .env.test — gitignored at repo root)
+├── .env.test.example           # Environment variable template (copy to .env.test — gitignored)
 │
 ├── fixtures/
-│   └── base.fixture.ts         # Shared test fixtures with page objects
+│   └── base.fixture.ts         # Shared test fixtures with page objects and adminTest
 │
-├── pages/                      # Page Object Model
+├── pages/                      # Page Object Model (shared across all sprints)
 │   ├── login.page.ts           # /login (phone + OTP)
 │   ├── admin-login.page.ts     # /admin-login (email/password)
 │   ├── register.page.ts        # /register (claimant/examiner)
@@ -32,28 +32,50 @@ e2e/
 │   └── admin-policies.page.ts  # /dashboard/admin/policies
 │
 ├── tests/
-│   ├── auth/                   # Authentication tests
-│   │   ├── admin-login.spec.ts
-│   │   ├── admin-login.smoke.spec.ts
-│   │   ├── phone-login.spec.ts
-│   │   ├── registration.spec.ts
-│   │   └── session.spec.ts
-│   ├── claimant/               # Claimant portal tests
-│   │   ├── claims-list.spec.ts
-│   │   ├── new-claim.spec.ts
-│   │   └── claim-detail.spec.ts
-│   ├── examiner/               # Examiner portal tests
-│   │   ├── claims-queue.spec.ts
-│   │   └── claim-review.spec.ts
-│   ├── admin/                  # Admin portal tests
-│   │   ├── dashboard.spec.ts
-│   │   ├── examiner-requests.spec.ts
-│   │   └── policies.spec.ts
-│   ├── security/               # Cross-role authorization
-│   │   └── authorization.spec.ts
-│   └── negative/               # Validation and resilience
-│       ├── validation.spec.ts
-│       └── resilience.spec.ts
+│   ├── sprint1/                # Auth, registration, policies (US-1..8, US-25..27)
+│   │   ├── US-001-claimant-registration.spec.ts
+│   │   ├── US-002-examiner-registration.spec.ts
+│   │   ├── US-003-otp-verification.spec.ts
+│   │   ├── US-004-registration-request-mgmt.spec.ts
+│   │   ├── US-005-registration-notification.spec.ts
+│   │   ├── US-006-claimant-examiner-login.spec.ts
+│   │   ├── US-007-admin-login.spec.ts
+│   │   ├── US-008-user-logout.spec.ts
+│   │   ├── US-025-policy-plan-addition.spec.ts
+│   │   ├── US-026-policy-plan-deletion.spec.ts
+│   │   └── US-027-policy-plan-viewing.spec.ts
+│   │
+│   ├── sprint2/                # Claim lifecycle, examiner queue (US-9..17)
+│   │   ├── US-009-claim-submission.spec.ts
+│   │   ├── US-010-claim-confirmation.spec.ts
+│   │   ├── US-011-claim-history.spec.ts
+│   │   ├── US-012-claim-status-tracking.spec.ts
+│   │   ├── US-013-claim-cancellation.spec.ts
+│   │   ├── US-014-claim-decision-notification.spec.ts
+│   │   ├── US-015-submitted-claims-view.spec.ts
+│   │   ├── US-016-claim-picking.spec.ts
+│   │   └── US-017-claim-access-restriction.spec.ts
+│   │
+│   ├── sprint3/                # Examiner decisions, AI analysis (US-18..23)
+│   │   ├── US-018-assigned-claims-overview.spec.ts
+│   │   ├── US-019-claim-decision.spec.ts
+│   │   ├── US-020-ai-analysis-trigger.spec.ts
+│   │   ├── US-021-ai-claim-analysis.spec.ts
+│   │   ├── US-022-ai-coverage-decision-view.spec.ts
+│   │   └── US-023-ai-draft-response.spec.ts
+│   │
+│   ├── sprint4/                # Draft editing, admin analytics (US-24, US-28..30)
+│   │   ├── US-024-draft-response-editing.spec.ts
+│   │   ├── US-028-claims-statistics.spec.ts
+│   │   ├── US-029-examiner-performance.spec.ts
+│   │   └── US-030-system-activity-log.spec.ts
+│   │
+│   └── cross-sprint/           # Business-flow E2E scenarios
+│       ├── E2E-001-full-claim-lifecycle.spec.ts
+│       ├── E2E-002-examiner-onboarding.spec.ts
+│       ├── E2E-003-claim-rejection-cancellation.spec.ts
+│       ├── E2E-004-policy-lifecycle.spec.ts
+│       └── E2E-005-ai-assisted-decision.spec.ts
 │
 ├── utils/
 │   ├── env.ts                  # Environment variable loader
@@ -64,6 +86,25 @@ e2e/
     └── fixtures/
         ├── sample.pdf          # Valid PDF for upload tests
         └── invalid.txt         # Invalid file for negative tests
+```
+
+## File Naming Convention
+
+| Pattern | Purpose |
+|---------|---------|
+| `US-{NNN}-{kebab-title}.spec.ts` | Sprint test file mapped to a user story |
+| `E2E-{NNN}-{kebab-title}.spec.ts` | Cross-sprint business-flow scenario |
+| `*.page.ts` | Page Object Model file |
+| `*.fixture.ts` | Playwright custom fixture |
+
+Each spec file's `test.describe` block includes `@` tags in its name for filtering:
+
+```typescript
+test.describe("US-7: Admin Login @sprint1 @auth @admin @login", () => {
+  test("TC-S1-029: admin logs in @smoke @release", async ({ ... }) => {
+    // ...
+  });
+});
 ```
 
 ## Prerequisites
@@ -103,26 +144,35 @@ cd backend && source venv/bin/activate && uvicorn app.main:app --reload --port 8
 ### 4. Run Tests
 
 ```bash
-# All tests (Chromium)
-npm test
+# ── Sprint-scoped ─────────────────────────────────────────
+npm run test:sprint1          # All Sprint 1 tests
+npm run test:sprint2          # All Sprint 2 tests
+npm run test:sprint3          # All Sprint 3 tests
+npm run test:sprint4          # All Sprint 4 tests
+npm run test:cross-sprint     # Cross-sprint E2E scenarios
 
-# Smoke tests only
-npm run test:smoke
+# ── Cumulative regression (Sprint 1 + 2 after Sprint 2 delivery) ──
+npx playwright test --project=sprint1 --project=sprint2
 
-# With UI mode (interactive)
-npm run test:ui
+# ── Tag-filtered ──────────────────────────────────────────
+npm run test:smoke            # @smoke tests across all sprints
+npm run test:release          # @release gate tests
+npx playwright test --grep @validation     # All validation tests
+npx playwright test --grep @admin          # All admin persona tests
+npx playwright test --grep "(?=.*@sprint2)(?=.*@examiner)"  # Combine tags
 
-# Debug mode (step through)
-npm run test:debug
+# ── Browser matrix ────────────────────────────────────────
+npm run test:chromium         # Full suite on Chromium
+npm run test:firefox          # Full suite on Firefox
+npm run test:mobile           # Mobile Chrome (Pixel 5)
 
-# Headed browser (visible)
-npm run test:headed
+# ── Development ───────────────────────────────────────────
+npm run test:ui               # Interactive UI mode
+npm run test:debug            # Step-through debugger
+npm run test:headed           # Visible browser
 
-# Specific file
-npx playwright test tests/auth/admin-login.spec.ts
-
-# Specific project
-npm run test:firefox
+# ── Specific file ─────────────────────────────────────────
+npx playwright test tests/sprint1/US-007-admin-login.spec.ts
 ```
 
 ### 5. View Reports
@@ -131,38 +181,87 @@ npm run test:firefox
 npm run report
 ```
 
+## Test Projects
+
+| Project | Scope | Usage |
+|---------|-------|-------|
+| `sprint1` | `tests/sprint1/` only | Run after Sprint 1 delivery |
+| `sprint2` | `tests/sprint2/` only | Run after Sprint 2 delivery |
+| `sprint3` | `tests/sprint3/` only | Run after Sprint 3 delivery |
+| `sprint4` | `tests/sprint4/` only | Run after Sprint 4 delivery |
+| `cross-sprint` | `tests/cross-sprint/` only | Business-flow E2E scenarios |
+| `smoke` | Tests tagged `@smoke` | Pre-merge quick checks (~1 min) |
+| `release` | Tests tagged `@release` | Release gate (must pass to deploy) |
+| `chromium` | All tests on Chrome | Default for CI regression |
+| `firefox` | All tests on Firefox | Cross-browser verification |
+| `mobile-chrome` | All tests on Pixel 5 | Mobile responsive testing |
+
+## Tagging Strategy
+
+Tests use `@` tags in `test.describe` and `test` names for flexible filtering.
+
+### Tag Taxonomy
+
+| Level | Tags | Purpose |
+|-------|------|---------|
+| **Sprint** | `@sprint1` `@sprint2` `@sprint3` `@sprint4` `@cross-sprint` | Run by sprint |
+| **Tier** | `@smoke` `@regression` `@release` | Run by test importance |
+| **Persona** | `@admin` `@examiner` `@claimant` | Run by user role |
+| **Feature** | `@auth` `@claims` `@policies` `@ai` `@notification` `@dashboard` | Run by feature area |
+| **Sub-feature** | `@registration` `@login` `@logout` `@submission` `@cancellation` `@picking` `@decision` `@draft` `@statistics` `@activity-log` | Fine-grained filtering |
+| **Type** | `@validation` `@authorization` `@resilience` `@navigation` `@empty-state` | Run by test characteristic |
+
+### Sprint Dependencies
+
+```
+Sprint 1 (Auth + Policies) ← foundation for all others
+    │
+    ├── Sprint 2 (Claims + Examiner Queue)
+    │       │
+    │       └── Sprint 3 (Decisions + AI Analysis)
+    │               │
+    │               └── Sprint 4 (Draft Editing + Analytics)
+    │
+    └── Cross-sprint scenarios span all four sprints
+```
+
+When running regression after Sprint N delivery, include all prior sprints:
+
+```bash
+# After Sprint 2 merges — run Sprint 1 + 2 together
+npx playwright test --project=sprint1 --project=sprint2
+```
+
 ## Authentication Strategy
 
 ### Admin (fully automated)
-Admin login uses email/password via Firebase Auth. The `auth.setup.ts` project creates `.auth/admin.json` by logging in through the browser (after dev servers start). That state is reused for all admin tests via `storageState`.
+Admin login uses email/password via Firebase Auth. The `auth.setup.ts` project creates `.auth/admin.json` by logging in through the browser (after dev servers start). That state is reused for all admin tests via `storageState` in the `adminTest` fixture.
 
-### Claimant & Examiner (requires OTP sandbox)
-These roles use SMS OTP via Authentica, which cannot be automated without an OTP sandbox. Options:
+### Claimant & Examiner (requires OTP bypass)
+These roles use SMS OTP via Authentica, which cannot be automated without an OTP bypass. Options:
 
-1. **Authentica Test Mode**: If Authentica provides a sandbox/test mode with a fixed OTP (e.g., "1234"), configure the test phone numbers and expected OTP in `.env.test`.
+1. **OTP Bypass (recommended for CI)**: Set `TEST_OTP_CODE=1234` in `.env.test` and configure the backend to accept the fixed code when `WATHEEQ_ENV=test`. All Sprint 1 login/registration tests use `env.TEST_OTP_CODE` for OTP entry.
 
-2. **Manual Auth State Generation**:
+2. **Authentica Sandbox**: If Authentica provides a sandbox with fixed OTPs, configure the test phone numbers and expected OTP in `.env.test`.
+
+3. **Manual Auth State Generation**:
    ```bash
-   # Start the app, then:
    npx playwright codegen http://localhost:3000/login
-
-   # Manually log in via the browser, then save state:
-   # In the Playwright Inspector, copy the storage state
+   # Log in via the browser, then save storage state to .auth/claimant.json
    ```
-   Save the JSON to `.auth/claimant.json` or `.auth/examiner.json`.
 
-3. **Firebase Admin SDK** (recommended for CI): Add a test setup script that uses Firebase Admin SDK to create custom tokens, then exchanges them for auth state via the browser. See `auth.setup.ts` for the login pattern.
+4. **Firebase Admin SDK** (recommended for CI): Add a test setup script that uses Firebase Admin SDK to create custom tokens, then exchanges them for auth state via the browser. See `auth.setup.ts` for the login pattern.
 
-Once auth state files exist, uncomment the `storageState` lines in claimant/examiner test files.
+Once auth state files exist, uncomment the `storageState` and `test.skip` lines in claimant/examiner test files (Sprint 2+).
 
-## Test Projects
+### Test Accounts
 
-| Project | Description | Usage |
-|---------|-------------|-------|
-| `chromium` | Main browser, full test suite | Default for CI |
-| `firefox` | Cross-browser verification | Optional |
-| `mobile-chrome` | Mobile responsive testing | Optional |
-| `smoke` | Critical path only (~1 min) | Pre-merge, quick checks |
+| Role | Phone / Email | Source |
+|------|---------------|--------|
+| Admin | `admin@watheeq.ai` / `Admin@1234` | `backend/create_admin.py` |
+| Claimant | `+966500000001` | `.env.test` `TEST_PHONE_CLAIMANT` |
+| Examiner | `+966500000002` | `.env.test` `TEST_PHONE_EXAMINER` |
+| Examiner 2 | `+966500000003` | `.env.test` `TEST_PHONE_EXAMINER_2` (for US-17 locking tests) |
 
 ## Writing New Tests
 
@@ -171,10 +270,12 @@ Once auth state files exist, uncomment the `storageState` lines in claimant/exam
 ```typescript
 import { test, expect } from "../../fixtures/base.fixture";
 
-test("example test", async ({ adminDashboardPage }) => {
-  await adminDashboardPage.goto();
-  await adminDashboardPage.expectLoaded();
-  await expect(adminDashboardPage.welcomeHeading).toBeVisible();
+test.describe("US-X: Feature Name @sprintN @persona @feature", () => {
+  test("TC-SN-XXX: scenario name @smoke @release", async ({ adminDashboardPage }) => {
+    await adminDashboardPage.goto();
+    await adminDashboardPage.expectLoaded();
+    await expect(adminDashboardPage.welcomeHeading).toBeVisible();
+  });
 });
 ```
 
@@ -183,26 +284,29 @@ test("example test", async ({ adminDashboardPage }) => {
 ```typescript
 import { adminTest as test, expect } from "../../fixtures/base.fixture";
 
-test("admin-only test", async ({ page }) => {
-  // Already authenticated as admin
-  await page.goto("/dashboard/admin");
+test.describe("US-X: Admin Feature @sprintN @admin", () => {
+  test("admin-only test @release", async ({ page }) => {
+    // Already authenticated as admin
+    await page.goto("/dashboard/admin");
+  });
 });
 ```
 
 ### Using test.step for Readability
 
 ```typescript
-test("complex flow", async ({ page }) => {
-  await test.step("Navigate to form", async () => {
-    await page.goto("/claimant/claims/new");
+test("TC-S2-001: submit claim with all fields @smoke", async ({ claimantNewClaimPage }) => {
+  await test.step("Fill patient information", async () => {
+    await claimantNewClaimPage.fillPatientInfo({ firstName: "Khalid", lastName: "Al-Mansouri", dob: "1990-05-15" });
   });
 
-  await test.step("Fill form data", async () => {
-    // ...
+  await test.step("Upload medical report", async () => {
+    await claimantNewClaimPage.uploadMedicalReport("data/fixtures/sample.pdf");
   });
 
   await test.step("Submit and verify", async () => {
-    // ...
+    await claimantNewClaimPage.submitClaim();
+    await claimantNewClaimPage.expectConfirmationModal();
   });
 });
 ```
@@ -234,6 +338,15 @@ test("complex flow", async ({ page }) => {
 - **Cleanup**: Firestore data is namespaced; stale data doesn't conflict
 - **Fixtures**: Static files (PDFs) live in `data/fixtures/`
 
+## Sprint Readiness
+
+| Sprint | Status | Blockers |
+|--------|--------|----------|
+| Sprint 1 | **Ready** — admin tests fully automated; OTP tests need bypass | OTP bypass for claimant/examiner login and registration |
+| Sprint 2 | **Designed** — tests written but `test.skip`'d | Claimant/examiner auth state; ≥1 policy plan seeded |
+| Sprint 3 | **Designed** — AI tests are placeholder scaffolds | `ai_service.py` implementation; AI UI components |
+| Sprint 4 | **Designed** — placeholder assertions | Stats/metrics/audit-log endpoints and UI |
+
 ## Troubleshooting
 
 ### Tests fail with "Firebase not configured"
@@ -245,7 +358,10 @@ Ensure `.env.test` has valid Firebase credentials and that the backend `.env` ma
 3. Ensure Firestore rules are deployed
 
 ### OTP tests are skipped
-This is expected. See "Authentication Strategy" above for setup options.
+This is expected until an OTP bypass is configured. See "Authentication Strategy" above.
+
+### Sprint 2–4 tests are skipped
+These tests have `test.skip(true, ...)` because they require claimant/examiner auth state. Enable them after configuring OTP bypass and creating storage states.
 
 ### Traces and screenshots
 On failure, find them in `e2e/test-results/`. View traces with:
