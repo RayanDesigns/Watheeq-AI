@@ -9,6 +9,22 @@ import { apiFetch } from "@/lib/apiClient";
 
 type Role = "claimant" | "examiner";
 
+const PREDEFINED_HOSPITALS = [
+  "Dr. Sulaiman Al Habib Hospital",
+  "Dallah Hospital",
+  "InterHealth Hospital",
+  "Dr. Soliman Fakeeh Hospital",
+  "Saudi German Hospital",
+  "Kingdom Hospital",
+  "Mouwasat Hospital",
+  "Al Hammadi Hospital",
+  "SMC Hospital",
+  "Elite Hospital",
+  "Care Medical Hospital",
+  "Hayat National Hospital",
+  "Meena Center",
+];
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -21,7 +37,9 @@ function RegisterForm() {
   const [phone, setPhone] = useState(phoneFromQuery);
   const [nationalId, setNationalId] = useState("");
   const [email, setEmail] = useState("");
-  const [hospitalName, setHospitalName] = useState("");
+  const [hospitalSelection, setHospitalSelection] = useState("");
+  const [customHospital, setCustomHospital] = useState("");
+  const hospitalName = hospitalSelection === "__other__" ? customHospital : hospitalSelection;
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(["", "", "", ""]);
   const [error, setError] = useState("");
@@ -355,15 +373,32 @@ function RegisterForm() {
                 <label className="block text-[12px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: "rgba(5,5,8,0.4)" }}>
                   Hospital name
                 </label>
-                <input
-                  type="text"
-                  value={hospitalName}
-                  onChange={(e) => setHospitalName(e.target.value)}
-                  placeholder="e.g. King Fahad Medical City"
+                <select
+                  value={hospitalSelection}
+                  onChange={(e) => { setHospitalSelection(e.target.value); if (e.target.value !== "__other__") setCustomHospital(""); }}
                   className="w-full px-3.5 py-2.5 rounded-lg border text-[14px] outline-none transition-all"
-                  style={{ borderColor: "#e8e8f0", color: "#050508" }}
+                  style={{ borderColor: "#e8e8f0", color: "#050508", background: "#fff" }}
                   disabled={otpSent}
-                />
+                >
+                  <option value="" disabled>Select a hospital</option>
+                  {PREDEFINED_HOSPITALS.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                  <option value="__other__">Other</option>
+                </select>
+                {hospitalSelection === "__other__" && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="overflow-hidden mt-2">
+                    <input
+                      type="text"
+                      value={customHospital}
+                      onChange={(e) => setCustomHospital(e.target.value)}
+                      placeholder="Enter hospital name"
+                      className="w-full px-3.5 py-2.5 rounded-lg border text-[14px] outline-none transition-all"
+                      style={{ borderColor: "#e8e8f0", color: "#050508" }}
+                      disabled={otpSent}
+                    />
+                  </motion.div>
+                )}
               </motion.div>
             )}
 
