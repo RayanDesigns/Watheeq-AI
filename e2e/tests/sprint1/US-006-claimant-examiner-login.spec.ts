@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/base.fixture";
 import { getTestEnv } from "../../utils/env";
+import { CLAIMANT_UID, EXAMINER_UID } from "../../utils/test-seed";
 
 const env = getTestEnv();
 
@@ -18,39 +19,28 @@ test.describe("US-6: Claimant and Claims Examiner Login @sprint1 @auth @login", 
   test("TC-S1-022: claimant logs in with phone + OTP @smoke @release @claimant", async ({
     loginPage,
   }) => {
-    await test.step("Enter phone and send OTP", async () => {
-      await loginPage.sendOtp(env.TEST_PHONE_CLAIMANT.replace("+966", ""));
-    });
-
-    await test.step("Enter OTP and sign in", async () => {
-      await loginPage.expectOtpFieldVisible();
-      await loginPage.verifyOtp(env.TEST_OTP_CODE);
-    });
-
-    await test.step("Verify redirect to claimant dashboard", async () => {
-      await expect(loginPage.page).toHaveURL(/\/claimant\/claims/, {
-        timeout: 15_000,
-      });
-    });
+    // Stubs send-otp + verify-otp. verify-otp returns a real Firebase custom
+    // token for the seeded CLAIMANT_UID so signInWithCustomToken completes
+    // and the app redirects to /dashboard/claimant → /claimant/claims.
+    await loginPage.stubOtpEndpointsForUid(CLAIMANT_UID, "claimant");
+    await loginPage.sendOtp(env.TEST_PHONE_CLAIMANT.replace("+966", ""));
+    await loginPage.expectOtpFieldVisible();
+    await loginPage.verifyOtp(env.TEST_OTP_CODE);
+    await loginPage.page.waitForURL(/\/claimant\/claims/, { timeout: 20_000 });
   });
 
   /* ── TC-S1-023 ─ Examiner login ──────────────────────────── */
   test("TC-S1-023: examiner logs in with phone + OTP @smoke @release @examiner", async ({
     loginPage,
   }) => {
-    await test.step("Enter phone and send OTP", async () => {
-      await loginPage.sendOtp(env.TEST_PHONE_EXAMINER.replace("+966", ""));
-    });
-
-    await test.step("Enter OTP and sign in", async () => {
-      await loginPage.expectOtpFieldVisible();
-      await loginPage.verifyOtp(env.TEST_OTP_CODE);
-    });
-
-    await test.step("Verify redirect to examiner dashboard", async () => {
-      await expect(loginPage.page).toHaveURL(/\/examiner\/claims/, {
-        timeout: 15_000,
-      });
+    await loginPage.stubOtpEndpointsForUid(EXAMINER_UID, "examiner");
+    await loginPage.sendOtp(env.TEST_PHONE_EXAMINER.replace("+966", ""));
+    await loginPage.expectOtpFieldVisible();
+    await loginPage.verifyOtp(env.TEST_OTP_CODE);
+    // Examiner landing is /dashboard/examiner (card grid). Claimant landing
+    // differs — /dashboard/claimant auto-redirects to /claimant/claims.
+    await loginPage.page.waitForURL(/\/dashboard\/examiner/, {
+      timeout: 20_000,
     });
   });
 
@@ -88,6 +78,10 @@ test.describe("US-6: Claimant and Claims Examiner Login @sprint1 @auth @login", 
   test("TC-S1-027: login with invalid OTP stays on login page @validation @regression", async ({
     loginPage,
   }) => {
+    // Stub send-otp so the OTP UI renders, and make verify-otp reject the
+    // code so we can assert the user remains on /login without depending on
+    // whether the phone is seeded or whether Authentica accepts "0000".
+    await loginPage.stubOtpEndpoints();
     await loginPage.sendOtp("500000001");
     await loginPage.expectOtpFieldVisible();
     await loginPage.verifyOtp("0000");

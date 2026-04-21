@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-13 – Claim Cancellation
@@ -7,8 +8,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * so that I can withdraw claims that are no longer needed.
  */
 test.describe("US-13: Claim Cancellation @sprint2 @claimant @claims @cancellation", () => {
-  // test.use({ storageState: ".auth/claimant.json" });
-  test.skip(true, "Requires claimant auth state");
+  test.use({ storageState: storageStatePath("claimant") });
 
   /* ── TC-S2-019 ─ Cancel a submitted claim ────────────────── */
   test("TC-S2-019: claimant cancels a submitted claim @smoke @release", async ({
@@ -61,7 +61,9 @@ test.describe("US-13: Claim Cancellation @sprint2 @claimant @claims @cancellatio
   test("dismiss cancel confirmation with Keep Claim @regression", async ({
     claimantClaimDetailPage,
   }) => {
-    await claimantClaimDetailPage.goto("submitted-claim-id");
+    // Uses a dedicated submitted-state claim so TC-S2-019 cancelling
+    // `submitted-claim-id` in parallel cannot race this test.
+    await claimantClaimDetailPage.goto("dismiss-cancel-claim-id");
     await claimantClaimDetailPage.expectLoaded();
 
     await claimantClaimDetailPage.cancelClaimButton.click();

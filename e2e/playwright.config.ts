@@ -11,8 +11,11 @@ export default defineConfig({
 
   fullyParallel: true,
   forbidOnly: CI,
-  retries: CI ? 2 : 0,
-  workers: CI ? 2 : undefined,
+  retries: CI ? 2 : 1,
+  // Cap local workers to keep the backend (single-process uvicorn) from
+  // getting saturated and producing tail-latency timeouts in otherwise
+  // healthy tests. The default (#cores) can easily be 8-12 on dev machines.
+  workers: CI ? 2 : 4,
 
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -42,6 +45,7 @@ export default defineConfig({
     /* ── Setup ────────────────────────────────────────────────── */
     {
       name: "setup",
+      testDir: __dirname,
       testMatch: /auth\.setup\.ts/,
     },
 

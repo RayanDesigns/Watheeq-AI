@@ -38,7 +38,11 @@ export class ClaimantClaimDetailPage {
   }
 
   async expectLoaded() {
-    await expect(this.patientName).toBeVisible({ timeout: 15_000 });
+    // Claim detail pages wait on both the user profile and the claim
+    // document to resolve through Firebase. Under parallel test load the
+    // combined tail latency can exceed the default 15 s, so we give the
+    // heading a generous budget before asserting.
+    await expect(this.patientName).toBeVisible({ timeout: 30_000 });
   }
 
   async expectStatus(status: string) {

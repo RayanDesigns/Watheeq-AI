@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-12 – Claim Status Tracking
@@ -7,8 +8,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * so that I can track its progress.
  */
 test.describe("US-12: Claim Status Tracking @sprint2 @claimant @claims @status", () => {
-  // test.use({ storageState: ".auth/claimant.json" });
-  test.skip(true, "Requires claimant auth state");
+  test.use({ storageState: storageStatePath("claimant") });
 
   /* ── TC-S2-015 ─ Detail page shows status badge ─────────── */
   test("TC-S2-015: claim detail shows correct status badge @smoke @release", async ({

@@ -43,7 +43,9 @@ test.describe("US-8: User Logout @sprint1 @auth @logout", () => {
   test("redirect unauthenticated users from protected routes @regression", async ({
     browser,
   }) => {
-    const context = await browser.newContext();
+    // Explicitly opt out of storageState so Firebase IDB/cookies from the
+    // cached admin session aren't inherited by this "anonymous" context.
+    const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
     await page.goto("/dashboard/admin");
@@ -56,7 +58,7 @@ test.describe("US-8: User Logout @sprint1 @auth @logout", () => {
   test("bare /dashboard redirects to /login @regression", async ({
     browser,
   }) => {
-    const context = await browser.newContext();
+    const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
     await page.goto("/dashboard");
@@ -69,7 +71,7 @@ test.describe("US-8: User Logout @sprint1 @auth @logout", () => {
   test("all protected routes redirect when unauthenticated @authorization @regression", async ({
     browser,
   }) => {
-    const context = await browser.newContext();
+    const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
 
     const protectedPaths = [

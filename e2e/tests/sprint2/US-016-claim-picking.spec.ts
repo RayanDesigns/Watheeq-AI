@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-16 – Claim Picking
@@ -7,8 +8,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * so that I can start processing it.
  */
 test.describe("US-16: Claim Picking @sprint2 @examiner @claims @picking", () => {
-  // test.use({ storageState: ".auth/examiner.json" });
-  test.skip(true, "Requires examiner auth state");
+  test.use({ storageState: storageStatePath("examiner") });
 
   /* ── TC-S2-029 ─ Pick a submitted claim ──────────────────── */
   test("TC-S2-029: examiner picks a submitted claim @smoke @release", async ({

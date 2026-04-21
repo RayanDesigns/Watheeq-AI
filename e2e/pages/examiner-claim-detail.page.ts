@@ -15,6 +15,7 @@ export class ExaminerClaimDetailPage {
   readonly makeDecisionHeading: Locator;
   readonly approveButton: Locator;
   readonly rejectButton: Locator;
+  readonly submitDecisionButton: Locator;
 
   // Confirmation modal
   readonly approveConfirmHeading: Locator;
@@ -40,15 +41,26 @@ export class ExaminerClaimDetailPage {
     this.statusDescription = page.locator("p").filter({ hasText: /claim|review|approved|rejected|cancelled/i }).first();
 
     this.makeDecisionHeading = page.getByText("Make a Decision");
-    this.approveButton = page.locator("#btn-approve");
-    this.rejectButton = page.locator("#btn-reject");
+    // The live UI renders the decision CTAs as buttons whose accessible
+    // name begins with "Approve Claim"/"Reject Claim" (followed by a short
+    // description). Match on that name, with a fallback to the original
+    // `#btn-*` ids in case the component is refactored to add them back.
+    this.approveButton = page
+      .locator("#btn-approve")
+      .or(page.getByRole("button", { name: /^Approve Claim/i }));
+    this.rejectButton = page
+      .locator("#btn-reject")
+      .or(page.getByRole("button", { name: /^Reject Claim/i }));
+    this.submitDecisionButton = page.getByRole("button", {
+      name: /^Submit Decision$/i,
+    });
 
     this.approveConfirmHeading = page.getByRole("heading", { name: "Approve this claim?" });
     this.rejectConfirmHeading = page.getByRole("heading", { name: "Reject this claim?" });
     this.yesApproveButton = page.getByRole("button", { name: "Yes, Approve" });
     this.yesRejectButton = page.getByRole("button", { name: "Yes, Reject" });
     this.cancelButton = page.getByRole("button", { name: "Cancel" });
-    this.decisionError = page.locator('[style*="color: #dc2626"]');
+    this.decisionError = page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]');
 
     this.postDecisionBanner = page.locator("p").filter({ hasText: /You (approved|rejected) this claim/i });
 
@@ -61,7 +73,7 @@ export class ExaminerClaimDetailPage {
   }
 
   async expectLoaded() {
-    await expect(this.patientName).toBeVisible({ timeout: 15_000 });
+    await expect(this.patientName).toBeVisible({ timeout: 30_000 });
   }
 
   async expectStatus(status: string) {
@@ -69,7 +81,13 @@ export class ExaminerClaimDetailPage {
   }
 
   async approveClaim() {
+    // The examiner UI is a two-step commit:
+    //   1. Select a radio-style "Approve Claim" card.
+    //   2. Click the "Submit Decision" CTA that appears once a card is
+    //      selected, which opens the "Approve this claim?" confirmation.
+    //   3. Confirm via "Yes, Approve".
     await this.approveButton.click();
+    await this.submitDecisionButton.click();
     await expect(this.approveConfirmHeading).toBeVisible();
     await this.yesApproveButton.click();
     await expect(this.postDecisionBanner).toBeVisible({ timeout: 15_000 });
@@ -77,6 +95,7 @@ export class ExaminerClaimDetailPage {
 
   async rejectClaim() {
     await this.rejectButton.click();
+    await this.submitDecisionButton.click();
     await expect(this.rejectConfirmHeading).toBeVisible();
     await this.yesRejectButton.click();
     await expect(this.postDecisionBanner).toBeVisible({ timeout: 15_000 });

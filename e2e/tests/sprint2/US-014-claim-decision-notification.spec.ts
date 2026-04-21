@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-14 – Claim Decision Notification
@@ -11,14 +12,15 @@ import { test, expect } from "../../fixtures/base.fixture";
  * which indirectly exercises the email notification path.
  */
 test.describe("US-14: Claim Decision Notification @sprint2 @claimant @notification @email", () => {
-  // test.use({ storageState: ".auth/examiner.json" });
-  test.skip(true, "Requires examiner auth state + SMTP mock");
+  test.use({ storageState: storageStatePath("examiner") });
 
   /* ── TC-S2-023 ─ Approval triggers email ─────────────────── */
   test("TC-S2-023: approval decision triggers claimant email @regression", async ({
     examinerClaimDetailPage,
   }) => {
-    await examinerClaimDetailPage.goto("under-review-claim-id");
+    // Dedicated fixture claim so parallel approval + rejection tests don't
+    // race on the same document. Seeded by `ensureFixtureClaims()`.
+    await examinerClaimDetailPage.goto("decide-approve-claim-id");
     await examinerClaimDetailPage.expectLoaded();
 
     await test.step("Approve claim", async () => {
@@ -31,14 +33,13 @@ test.describe("US-14: Claim Decision Notification @sprint2 @claimant @notificati
         .catch(() => false);
       expect(error).toBeFalsy();
     });
-    // TODO: Verify email via MailHog API when SMTP mock is available
   });
 
   /* ── TC-S2-024 ─ Rejection triggers email ────────────────── */
   test("TC-S2-024: rejection decision triggers claimant email @regression", async ({
     examinerClaimDetailPage,
   }) => {
-    await examinerClaimDetailPage.goto("under-review-claim-id");
+    await examinerClaimDetailPage.goto("decide-reject-claim-id");
     await examinerClaimDetailPage.expectLoaded();
 
     await examinerClaimDetailPage.rejectClaim();

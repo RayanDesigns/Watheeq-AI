@@ -28,8 +28,8 @@ export class ExaminerClaimsPage {
     this.claimCards = page.locator(".rounded-2xl.border.p-5");
     this.emptyStateHeading = page.getByRole("heading", { name: "No claims here" });
     this.loadingSpinner = page.locator(".animate-spin");
-    this.errorMessage = page.locator('[style*="color: #dc2626"]').first();
-    this.pickErrorMessage = page.locator('[style*="color: #dc2626"]').nth(1);
+    this.errorMessage = page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]').first();
+    this.pickErrorMessage = page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]').nth(1);
   }
 
   async goto() {

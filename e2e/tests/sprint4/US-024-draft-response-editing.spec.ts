@@ -48,7 +48,7 @@ test.describe("US-24: Draft Response Editing @sprint4 @examiner @ai @draft @edit
     // const draftArea = page.locator('[data-testid="ai-draft-response-editor"]');
     // await draftArea.fill("");
     // await page.getByRole("button", { name: /Send|Submit/i }).click();
-    // await expect(page.locator('[style*="color: #dc2626"]')).toBeVisible();
+    // await expect(page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]')).toBeVisible();
     expect(true).toBeTruthy(); // Placeholder
   });
 });

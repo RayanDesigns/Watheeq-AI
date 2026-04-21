@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/base.fixture";
 import { FIXTURE_PDF_PATH } from "../../utils/test-data";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-10 – Claim Submission Confirmation
@@ -8,8 +9,7 @@ import { FIXTURE_PDF_PATH } from "../../utils/test-data";
  * reference number upon submission, so that I can track my claim.
  */
 test.describe("US-10: Claim Submission Confirmation @sprint2 @claimant @claims @confirmation", () => {
-  // test.use({ storageState: ".auth/claimant.json" });
-  test.skip(true, "Requires claimant auth state");
+  test.use({ storageState: storageStatePath("claimant") });
 
   /* ── TC-S2-008 ─ Confirmation shows reference ───────────── */
   test("TC-S2-008: confirmation modal shows unique claim reference @smoke @release", async ({

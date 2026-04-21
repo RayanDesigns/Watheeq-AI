@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-11 – Claim History Overview
@@ -7,8 +8,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * so that I have a complete overview of my claims history.
  */
 test.describe("US-11: Claim History Overview @sprint2 @claimant @claims @list", () => {
-  // test.use({ storageState: ".auth/claimant.json" });
-  test.skip(true, "Requires claimant auth state");
+  test.use({ storageState: storageStatePath("claimant") });
 
   /* ── TC-S2-012 ─ All claims visible ──────────────────────── */
   test("TC-S2-012: claimant sees all their claims @smoke @release", async ({
@@ -18,14 +18,27 @@ test.describe("US-11: Claim History Overview @sprint2 @claimant @claims @list", 
     await claimantClaimsPage.expectLoaded();
 
     await test.step("Verify claims visible or empty state", async () => {
-      const hasClaims = await claimantClaimsPage.claimCards
+      // Wait for the /api/claims fetch to settle. `isVisible()` is sync so
+      // without retrying we can read `false` while the page is still loading.
+      await claimantClaimsPage.loadingSpinner
         .first()
-        .isVisible()
-        .catch(() => false);
-      const hasEmpty = await claimantClaimsPage.emptyStateHeading
-        .isVisible()
-        .catch(() => false);
-      expect(hasClaims || hasEmpty).toBeTruthy();
+        .waitFor({ state: "hidden", timeout: 15_000 })
+        .catch(() => {});
+      await expect
+        .poll(
+          async () => {
+            const hasClaims = await claimantClaimsPage.claimCards
+              .first()
+              .isVisible()
+              .catch(() => false);
+            const hasEmpty = await claimantClaimsPage.emptyStateHeading
+              .isVisible()
+              .catch(() => false);
+            return hasClaims || hasEmpty;
+          },
+          { timeout: 20_000, intervals: [500, 1000, 2000] },
+        )
+        .toBeTruthy();
     });
   });
 
@@ -33,8 +46,20 @@ test.describe("US-11: Claim History Overview @sprint2 @claimant @claims @list", 
   test("TC-S2-013: empty state when no claims exist @regression", async ({
     claimantClaimsPage,
   }) => {
+    // The seeded claimant owns several fixture claims, so stub the list
+    // endpoint to simulate a freshly registered user with no history.
+    await claimantClaimsPage.page.route("**/api/claims", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      } else {
+        await route.continue();
+      }
+    });
     await claimantClaimsPage.goto();
-    // For a freshly registered claimant with no claims
     await claimantClaimsPage.expectEmptyState();
   });
 

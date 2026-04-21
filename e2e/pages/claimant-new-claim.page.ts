@@ -48,7 +48,7 @@ export class ClaimantNewClaimPage {
     this.supportingDocsZone = page.locator('[data-testid="upload-supporting-docs"]');
 
     this.submitButton = page.getByRole("button", { name: "Submit Claim" });
-    this.errorMessage = page.locator('[style*="color: #dc2626"]').first();
+    this.errorMessage = page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]').first();
 
     this.confirmationHeading = page.getByRole("heading", { name: "Claim Submitted!" });
     this.claimReferenceNumber = page.locator(".font-mono.font-bold");
@@ -71,6 +71,13 @@ export class ClaimantNewClaimPage {
   }
 
   async selectPolicy(policyName: string) {
+    // Policies load asynchronously via /api/policies once the Firebase auth
+    // state resolves. The <select> is rendered with `disabled={loadingPolicies}`
+    // while the fetch is in flight, so we must wait for it to become enabled
+    // *and* for the target option to render before attempting a selection.
+    await expect(this.policySelect).toBeEnabled({ timeout: 30_000 });
+    const option = this.policySelect.locator("option", { hasText: policyName });
+    await expect(option).toHaveCount(1, { timeout: 15_000 });
     await this.policySelect.selectOption({ label: policyName });
   }
 
@@ -83,31 +90,21 @@ export class ClaimantNewClaimPage {
    * Falls back to locating by text if data-testid is not present.
    */
   async uploadMedicalReport(filePath: string) {
-    const absolutePath = path.resolve(__dirname, "..", filePath);
-    const uploadZone = this.page.locator('[data-testid="upload-medical-report"]')
-      .or(this.page.getByText("Medical Report").locator("..").locator(".."));
-    const clickTarget = uploadZone.getByText("Click to select PDF");
-
-    const [fileChooser] = await Promise.all([
-      this.page.waitForEvent("filechooser"),
-      clickTarget.click(),
-    ]);
-    await fileChooser.setFiles(absolutePath);
-
-    // Click the Upload button that appears after file selection
-    const uploadButton = uploadZone.getByRole("button", { name: "Upload" });
-    await uploadButton.click();
-
-    // Wait for upload success
-    await expect(uploadZone.getByText("Uploaded successfully")).toBeVisible({
-      timeout: 30_000,
-    });
+    await this._uploadToZone(filePath, "upload-medical-report");
   }
 
   async uploadSupportingDocs(filePath: string) {
+    await this._uploadToZone(filePath, "upload-supporting-docs");
+  }
+
+  /**
+   * Shared upload helper. Scoped strictly to the matching testid so the
+   * "Click to select PDF" text isn't matched across both zones (strict-mode
+   * violation) when only one is being targeted.
+   */
+  private async _uploadToZone(filePath: string, testId: string) {
     const absolutePath = path.resolve(__dirname, "..", filePath);
-    const uploadZone = this.page.locator('[data-testid="upload-supporting-docs"]')
-      .or(this.page.getByText("Supporting Documents").locator("..").locator(".."));
+    const uploadZone = this.page.locator(`[data-testid="${testId}"]`);
     const clickTarget = uploadZone.getByText("Click to select PDF");
 
     const [fileChooser] = await Promise.all([
@@ -119,8 +116,10 @@ export class ClaimantNewClaimPage {
     const uploadButton = uploadZone.getByRole("button", { name: "Upload" });
     await uploadButton.click();
 
+    // Firebase Storage upload can take > 30 s under parallel load — give it
+    // enough headroom to stay stable on heavier test runs.
     await expect(uploadZone.getByText("Uploaded successfully")).toBeVisible({
-      timeout: 30_000,
+      timeout: 60_000,
     });
   }
 

@@ -1,7 +1,4 @@
 import { test, expect } from "../../fixtures/base.fixture";
-import { getTestEnv } from "../../utils/env";
-
-const env = getTestEnv();
 
 /**
  * US-3 – Phone Number Verification
@@ -9,12 +6,18 @@ const env = getTestEnv();
  * As a Claimant or Claims Examiner, I want to verify my phone number
  * via OTP during registration, so that my identity is confirmed
  * before accessing the system.
+ *
+ * These tests exercise the FRONT-END OTP flow: they verify that the OTP
+ * inputs appear, remain editable, and that the UI does not advance on an
+ * invalid code. They intentionally stub the backend endpoints so they do not
+ * depend on a seeded user or on the live Authentica SMS provider.
  */
 test.describe("US-3: Phone Number Verification @sprint1 @auth @otp", () => {
   /* ── TC-S1-012 ─ OTP fields appear after Continue ────────── */
   test("TC-S1-012: OTP inputs appear after valid phone submission @smoke @release", async ({
     loginPage,
   }) => {
+    await loginPage.stubOtpEndpoints();
     await loginPage.goto();
 
     await test.step("Enter phone and click Continue", async () => {
@@ -30,6 +33,7 @@ test.describe("US-3: Phone Number Verification @sprint1 @auth @otp", () => {
   test("TC-S1-013: invalid OTP is rejected @validation @regression", async ({
     loginPage,
   }) => {
+    await loginPage.stubOtpEndpoints();
     await loginPage.goto();
     await loginPage.sendOtp("500000001");
     await loginPage.expectOtpFieldVisible();
@@ -47,11 +51,11 @@ test.describe("US-3: Phone Number Verification @sprint1 @auth @otp", () => {
   test("TC-S1-014: sign-in button requires OTP entry @validation", async ({
     loginPage,
   }) => {
+    await loginPage.stubOtpEndpoints();
     await loginPage.goto();
     await loginPage.sendOtp("500000001");
     await loginPage.expectOtpFieldVisible();
 
-    // Sign-in button should not perform successful auth without OTP entry
     await expect(loginPage.signInButton).toBeVisible();
   });
 
@@ -59,6 +63,7 @@ test.describe("US-3: Phone Number Verification @sprint1 @auth @otp", () => {
   test("phone number editable after OTP sent @regression", async ({
     loginPage,
   }) => {
+    await loginPage.stubOtpEndpoints();
     await loginPage.goto();
     await loginPage.sendOtp("500000001");
     await loginPage.expectOtpFieldVisible();
@@ -70,6 +75,7 @@ test.describe("US-3: Phone Number Verification @sprint1 @auth @otp", () => {
   test("handle rapid OTP resends gracefully @resilience", async ({
     loginPage,
   }) => {
+    await loginPage.stubOtpEndpoints();
     await loginPage.goto();
     await loginPage.sendOtp("500000001");
     await loginPage.expectOtpFieldVisible();

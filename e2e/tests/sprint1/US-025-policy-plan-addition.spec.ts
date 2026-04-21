@@ -28,6 +28,15 @@ test.describe("US-25: Policy Plan Addition @sprint1 @admin @policies @crud", () 
       await adminPoliciesPage.addPolicy(uniqueName, "data/fixtures/sample.pdf");
     });
 
+    await test.step("Wait for upload to finish (modal closes)", async () => {
+      // The submit button renders "Uploading…" while the PDF is pushed to
+      // Firebase Storage; the modal closes once the API returns. Waiting on
+      // the modal instead of a fixed sleep avoids flakes on slower CI runs.
+      await expect(adminPoliciesPage.modalHeading).toBeHidden({
+        timeout: 60_000,
+      });
+    });
+
     await test.step("Verify policy appears in list", async () => {
       await expect(
         adminPoliciesPage.page.getByText(uniqueName),
@@ -91,14 +100,27 @@ test.describe("US-25: Policy Plan Addition @sprint1 @admin @policies @crud", () 
   test("show policies list or empty state @regression", async ({
     adminPoliciesPage,
   }) => {
-    await adminPoliciesPage.page.waitForTimeout(3000);
-    const hasPolicies = await adminPoliciesPage.policyCards
+    // Wait for the policies fetch to settle instead of a fixed sleep so the
+    // assertion stays stable when the backend is under parallel load.
+    await adminPoliciesPage.loadingSpinner
       .first()
-      .isVisible()
-      .catch(() => false);
-    const hasEmpty = await adminPoliciesPage.emptyState
-      .isVisible()
-      .catch(() => false);
-    expect(hasPolicies || hasEmpty).toBeTruthy();
+      .waitFor({ state: "hidden", timeout: 30_000 })
+      .catch(() => {});
+    await expect
+      .poll(
+        async () => {
+          const hasPolicies = await adminPoliciesPage.policyCards
+            .first()
+            .isVisible()
+            .catch(() => false);
+          const hasEmpty = await adminPoliciesPage.emptyState
+            .first()
+            .isVisible()
+            .catch(() => false);
+          return hasPolicies || hasEmpty;
+        },
+        { timeout: 40_000, intervals: [500, 1000, 2000, 4000] },
+      )
+      .toBeTruthy();
   });
 });

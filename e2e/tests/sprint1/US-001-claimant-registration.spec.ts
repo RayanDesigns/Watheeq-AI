@@ -18,30 +18,28 @@ test.describe("US-1: Claimant Account Registration @sprint1 @auth @claimant @reg
   test("TC-S1-001: register with all valid fields @smoke @release", async ({
     registerPage,
   }) => {
-    await test.step("Select claimant role", async () => {
-      await registerPage.selectRole("claimant");
-      await expect(registerPage.hospitalNameInput).toBeVisible();
+    // Use a brand-new phone/email/NID so the backend's duplicate-guard doesn't
+    // fire. All three OTP/signup endpoints are stubbed: send-otp → 200,
+    // verify-otp → {is_new_user:true}, signup → {token, role:"claimant"}.
+    // The token is a real Firebase custom token minted for the seeded
+    // claimant UID, so `signInWithCustomToken` succeeds for real and the
+    // app redirects to /claimant/claims.
+    await registerPage.stubHappyClaimantSignup();
+    await registerPage.selectRole("claimant");
+    await expect(registerPage.hospitalNameInput).toBeVisible();
+    await registerPage.fillClaimantDetails({
+      fullName: "Test Claimant Happy",
+      nationalId: "9000000001",
+      email: "claimant-happy-e2e@example.com",
+      hospitalName: "King Fahad Medical City",
+      phone: "+966500000077",
     });
-
-    await test.step("Fill personal details", async () => {
-      await registerPage.fillClaimantDetails({
-        fullName: "Test Claimant E2E",
-        nationalId: "1234567890",
-        email: "claimant-e2e@example.com",
-        hospitalName: "King Fahad Medical City",
-        phone: env.TEST_PHONE_CLAIMANT,
-      });
-    });
-
-    await test.step("Submit and enter OTP", async () => {
-      await registerPage.continueButton.click();
-      await expect(registerPage.otpInputs.first()).toBeVisible();
-      await registerPage.fillOtp(env.TEST_OTP_CODE);
-      await registerPage.createAccountButton.click();
-    });
-
-    await test.step("Verify success", async () => {
-      await expect(registerPage.successHeading).toBeVisible({ timeout: 15_000 });
+    await registerPage.continueButton.click();
+    await expect(registerPage.otpInputs.first()).toBeVisible();
+    await registerPage.fillOtp(env.TEST_OTP_CODE);
+    await registerPage.createAccountButton.click();
+    await registerPage.page.waitForURL(/\/claimant\/claims/, {
+      timeout: 20_000,
     });
   });
 
@@ -49,6 +47,13 @@ test.describe("US-1: Claimant Account Registration @sprint1 @auth @claimant @reg
   test("TC-S1-002: reject duplicate phone number @validation @regression", async ({
     registerPage,
   }) => {
+    // Without seeded DB data the backend would treat this phone as new and
+    // transition to the OTP screen. Stub the 409 response to exercise the
+    // UI's duplicate-phone error handling deterministically.
+    await registerPage.stubSendOtpError({
+      status: 409,
+      detail: "An account already exists for this number. Please login.",
+    });
     await registerPage.fillClaimantDetails({
       fullName: "Duplicate Phone User",
       nationalId: "9999999999",
@@ -57,13 +62,17 @@ test.describe("US-1: Claimant Account Registration @sprint1 @auth @claimant @reg
       phone: env.TEST_PHONE_CLAIMANT,
     });
     await registerPage.continueButton.click();
-    await registerPage.expectErrorVisible();
+    await registerPage.expectErrorVisible(/already exists/i);
   });
 
   /* ── TC-S1-003 ─ Duplicate National ID ───────────────────── */
   test("TC-S1-003: reject duplicate National ID @validation @regression", async ({
     registerPage,
   }) => {
+    await registerPage.stubSendOtpError({
+      status: 409,
+      detail: "This National ID or Iqama is already registered.",
+    });
     await registerPage.fillClaimantDetails({
       fullName: "Duplicate NID User",
       nationalId: "1234567890",
@@ -72,13 +81,17 @@ test.describe("US-1: Claimant Account Registration @sprint1 @auth @claimant @reg
       phone: "+966599999999",
     });
     await registerPage.continueButton.click();
-    await registerPage.expectErrorVisible();
+    await registerPage.expectErrorVisible(/National ID|Iqama/i);
   });
 
   /* ── TC-S1-004 ─ Duplicate email ─────────────────────────── */
   test("TC-S1-004: reject duplicate email @validation @regression", async ({
     registerPage,
   }) => {
+    await registerPage.stubSendOtpError({
+      status: 409,
+      detail: "This email address is already registered.",
+    });
     await registerPage.fillClaimantDetails({
       fullName: "Duplicate Email User",
       nationalId: "9876543210",
@@ -87,7 +100,7 @@ test.describe("US-1: Claimant Account Registration @sprint1 @auth @claimant @reg
       phone: "+966599999998",
     });
     await registerPage.continueButton.click();
-    await registerPage.expectErrorVisible();
+    await registerPage.expectErrorVisible(/email/i);
   });
 
   /* ── TC-S1-005 ─ Required fields validation ──────────────── */

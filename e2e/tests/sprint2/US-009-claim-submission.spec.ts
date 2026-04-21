@@ -1,5 +1,6 @@
 import { test, expect } from "../../fixtures/base.fixture";
 import { FIXTURE_PDF_PATH, FIXTURE_INVALID_FILE_PATH } from "../../utils/test-data";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-9 – Claim Submission
@@ -11,9 +12,7 @@ import { FIXTURE_PDF_PATH, FIXTURE_INVALID_FILE_PATH } from "../../utils/test-da
  * Preconditions: claimant authenticated, ≥1 policy plan exists.
  */
 test.describe("US-9: Claim Submission @sprint2 @claimant @claims @submission", () => {
-  // TODO: Uncomment when claimant storage state is available
-  // test.use({ storageState: ".auth/claimant.json" });
-  test.skip(true, "Requires claimant auth state — enable after OTP bypass is configured");
+  test.use({ storageState: storageStatePath("claimant") });
 
   test.beforeEach(async ({ claimantNewClaimPage }) => {
     await claimantNewClaimPage.goto();

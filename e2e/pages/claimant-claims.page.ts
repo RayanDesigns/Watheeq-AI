@@ -17,11 +17,16 @@ export class ClaimantClaimsPage {
     this.page = page;
     this.heading = page.getByRole("heading", { name: "My Claims" });
     this.newClaimButton = page.getByRole("link", { name: "New Claim" });
-    this.claimCards = page.locator("a[href^='/claimant/claims/']");
+    // Scope to actual claim detail links. `/claimant/claims/new` (the sidebar
+    // "Submit Claim" link) also starts with `/claimant/claims/` so we must
+    // exclude it to avoid matching the nav item as a "card".
+    this.claimCards = page.locator(
+      "a[href^='/claimant/claims/']:not([href='/claimant/claims/new'])",
+    );
     this.emptyStateHeading = page.getByRole("heading", { name: "No claims yet" });
     this.submitClaimButton = page.getByRole("link", { name: "Submit a Claim" });
     this.loadingSpinner = page.locator(".animate-spin");
-    this.errorMessage = page.locator('[style*="color: #dc2626"]').first();
+    this.errorMessage = page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]').first();
   }
 
   async goto() {

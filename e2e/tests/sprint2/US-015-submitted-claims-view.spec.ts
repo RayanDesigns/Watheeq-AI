@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-15 – Submitted Claims View
@@ -7,8 +8,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * so that I can identify claims that need to be reviewed.
  */
 test.describe("US-15: Submitted Claims View @sprint2 @examiner @claims @queue", () => {
-  // test.use({ storageState: ".auth/examiner.json" });
-  test.skip(true, "Requires examiner auth state");
+  test.use({ storageState: storageStatePath("examiner") });
 
   /* ── TC-S2-026 ─ Submitted tab shows submitted claims ───── */
   test("TC-S2-026: examiner views submitted claims tab @smoke @release", async ({
@@ -22,14 +22,28 @@ test.describe("US-15: Submitted Claims View @sprint2 @examiner @claims @queue", 
     });
 
     await test.step("Verify claims or empty state", async () => {
-      const hasClaims = await examinerClaimsPage.claimCards
+      // Wait for the queue fetch to settle; `isVisible()` is a synchronous
+      // check with no auto-retry, so without a wait we can race the async
+      // Firestore query and read `false` while the list is still loading.
+      await examinerClaimsPage.loadingSpinner
         .first()
-        .isVisible()
-        .catch(() => false);
-      const hasEmpty = await examinerClaimsPage.emptyStateHeading
-        .isVisible()
-        .catch(() => false);
-      expect(hasClaims || hasEmpty).toBeTruthy();
+        .waitFor({ state: "hidden", timeout: 15_000 })
+        .catch(() => {});
+      await expect
+        .poll(
+          async () => {
+            const hasClaims = await examinerClaimsPage.claimCards
+              .first()
+              .isVisible()
+              .catch(() => false);
+            const hasEmpty = await examinerClaimsPage.emptyStateHeading
+              .isVisible()
+              .catch(() => false);
+            return hasClaims || hasEmpty;
+          },
+          { timeout: 20_000, intervals: [500, 1000, 2000] },
+        )
+        .toBeTruthy();
     });
   });
 

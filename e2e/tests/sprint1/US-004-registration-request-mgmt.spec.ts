@@ -22,15 +22,28 @@ test.describe("US-4: Registration Request Management @sprint1 @admin @examiner-r
     });
 
     await test.step("Verify requests or empty state", async () => {
-      await adminRequestsPage.page.waitForTimeout(3000);
-      const hasRequests = await adminRequestsPage.requestCards
+      // Wait for the list fetch to settle (spinner disappears) and then for
+      // either the requests grid or the empty-state text to be visible. A
+      // fixed 3s wait was too short under parallel load.
+      await adminRequestsPage.loadingSpinner
         .first()
-        .isVisible()
-        .catch(() => false);
-      const hasEmpty = await adminRequestsPage.emptyState
-        .isVisible()
-        .catch(() => false);
-      expect(hasRequests || hasEmpty).toBeTruthy();
+        .waitFor({ state: "hidden", timeout: 15_000 })
+        .catch(() => {});
+      await expect
+        .poll(
+          async () => {
+            const hasRequests = await adminRequestsPage.requestCards
+              .first()
+              .isVisible()
+              .catch(() => false);
+            const hasEmpty = await adminRequestsPage.emptyState
+              .isVisible()
+              .catch(() => false);
+            return hasRequests || hasEmpty;
+          },
+          { timeout: 20_000, intervals: [500, 1000, 2000] },
+        )
+        .toBeTruthy();
     });
   });
 

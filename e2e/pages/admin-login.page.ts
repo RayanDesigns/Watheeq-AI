@@ -19,7 +19,18 @@ export class AdminLoginPage {
     this.emailInput = page.getByPlaceholder("admin@watheeq.ai");
     this.passwordInput = page.getByPlaceholder("Enter password");
     this.signInButton = page.getByRole("button", { name: "Sign in" });
-    this.errorMessage = page.locator('[style*="color: #dc2626"]').first();
+    // The error banner is a framer-motion <motion.div> with the distinctive
+    // className combo "rounded-xl text-sm gap-2.5" and an inner warning SVG.
+    // framer-motion rewrites the `style` attribute on mount, so matching by
+    // inline-style colour is unreliable; the className combination is stable.
+    this.errorMessage = page
+      .locator(
+        '[class*="rounded-xl"][class*="gap-2.5"][class*="text-sm"]:has(svg)',
+      )
+      .or(
+        page.locator('[style*="color:#dc2626"], [style*="color: #dc2626"]'),
+      )
+      .first();
     this.claimantExaminerLink = page.getByRole("link", { name: "Claimant / Examiner login" });
     this.loadingSpinner = page.getByRole("button", { name: "Signing in..." });
   }

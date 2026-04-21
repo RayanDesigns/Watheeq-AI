@@ -1,4 +1,5 @@
 import { test, expect } from "../../fixtures/base.fixture";
+import { storageStatePath } from "../../utils/env";
 
 /**
  * US-17 – Claim Access Restriction
@@ -11,8 +12,7 @@ import { test, expect } from "../../fixtures/base.fixture";
  * the locking mechanism. Uses TEST_PHONE_EXAMINER and TEST_PHONE_EXAMINER_2.
  */
 test.describe("US-17: Claim Access Restriction @sprint2 @examiner @claims @locking @authorization", () => {
-  // test.use({ storageState: ".auth/examiner.json" });
-  test.skip(true, "Requires two examiner auth states for locking tests");
+  test.use({ storageState: storageStatePath("examiner") });
 
   /* ── TC-S2-032 ─ Second examiner cannot pick ─────────────── */
   test("TC-S2-032: picked claim not pickable by second examiner @smoke @release", async ({
@@ -32,9 +32,16 @@ test.describe("US-17: Claim Access Restriction @sprint2 @examiner @claims @locki
   test("TC-S2-033: decision panel not visible for other examiner @authorization", async ({
     examinerClaimDetailPage,
   }) => {
-    // Examiner B navigates to a claim picked by Examiner A
+    // Examiner B navigates to a claim picked by Examiner A. The backend
+    // returns 403 → the frontend renders an "access denied" stub with no
+    // patient heading, so we assert the denial copy directly rather than
+    // waiting for the normal claim-loaded state.
     await examinerClaimDetailPage.goto("other-examiner-claim-id");
-    await examinerClaimDetailPage.expectLoaded();
+    await expect(
+      examinerClaimDetailPage.page.getByText(
+        /do not have access to this claim/i,
+      ),
+    ).toBeVisible({ timeout: 15_000 });
     await examinerClaimDetailPage.expectDecisionPanelNotVisible();
   });
 

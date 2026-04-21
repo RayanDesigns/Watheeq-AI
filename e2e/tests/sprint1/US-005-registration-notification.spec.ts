@@ -38,7 +38,7 @@ test.describe("US-5: Registration Status Notification @sprint1 @admin @examiner 
       await adminRequestsPage.page.waitForTimeout(3000);
 
       const errorVisible = await adminRequestsPage.page
-        .locator('[style*="color: #dc2626"]')
+        .locator('[style*="color:#dc2626"], [style*="color: #dc2626"]')
         .isVisible()
         .catch(() => false);
       expect(errorVisible).toBeFalsy();
@@ -70,7 +70,7 @@ test.describe("US-5: Registration Status Notification @sprint1 @admin @examiner 
     await adminRequestsPage.page.waitForTimeout(3000);
 
     const errorVisible = await adminRequestsPage.page
-      .locator('[style*="color: #dc2626"]')
+      .locator('[style*="color:#dc2626"], [style*="color: #dc2626"]')
       .isVisible()
       .catch(() => false);
     expect(errorVisible).toBeFalsy();
