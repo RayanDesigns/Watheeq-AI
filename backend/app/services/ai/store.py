@@ -66,20 +66,40 @@ def update_claim_with_ai_result(
     ai_message: str,
     ai_draft: str,
     ai_draft_original: str,
+    ai_confidence: Optional[float] = None,
+    ai_clauses: Optional[list] = None,
+    ai_flags: Optional[list] = None,
 ) -> bool:
-    """Persist AI outputs onto the existing claim document."""
+    """Persist AI outputs onto the existing claim document.
+
+    Stores both the human-readable summary fields (decision/message/draft) and
+    the structured fields (confidence, clauses, flags) so the examiner UI can
+    rehydrate the full panel on reload — even after the in-memory cache is gone.
+    """
     try:
         ref = get_db().collection("claims").document(claim_id)
         if not ref.get().exists:
             logger.error(f"Claim {claim_id} not found when writing AI result")
             return False
-        ref.update({
+
+        update: dict = {
             "aiDecision": ai_decision,
             "aiMessage": ai_message,
             "aiDraft": ai_draft,
             "aiDraftOriginal": ai_draft_original,
-        })
-        logger.info(f"Claim {claim_id} updated with AI result (decision={ai_decision})")
+        }
+        if ai_confidence is not None:
+            update["aiConfidence"] = ai_confidence
+        if ai_clauses is not None:
+            update["aiClauses"] = ai_clauses
+        if ai_flags is not None:
+            update["aiFlags"] = ai_flags
+
+        ref.update(update)
+        logger.info(
+            f"Claim {claim_id} updated with AI result "
+            f"(decision={ai_decision}, confidence={ai_confidence})"
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to update claim {claim_id} with AI result: {e}")

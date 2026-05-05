@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.models.ai_analysis import AnalysisTriggerRequest
 from app.services.ai import llm_service, pdf_service, response_service, store
+from app.services.ai.events import broker
 from app.services.ai.exceptions import (
     AnalysisNotFoundError,
     LLMResponseParsingError,
@@ -30,12 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> None:
-    """Background task: full analysis pipeline. Updates the in-memory cache as it progresses."""
+    """Background task: full analysis pipeline. Updates the in-memory cache as it progresses
+    and publishes live progress events on the broker so the UI can stream them."""
     started = time.time()
+    claim_id = request.claim_id
 
     record: dict = {
         "analysis_id": analysis_id,
-        "claim_id": request.claim_id,
+        "claim_id": claim_id,
         "examiner_id": request.examiner_id,
         "status": "processing",
         "ai_model_used": settings.LLM_MODEL,
@@ -50,13 +53,20 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         "processing_time_seconds": None,
         "error_message": None,
     }
-    store.save_analysis(request.claim_id, record)
+    store.save_analysis(claim_id, record)
+
+    # Reset any stale events from a previous run on this claim and emit a fresh start
+    broker.reset(claim_id)
+    broker.publish(claim_id, {
+        "type": "step",
+        "step": "started",
+        "message": "Starting AI analysis…",
+    })
 
     try:
-        # Always fetch the claim from Firestore — request fields are optional
-        claim_doc = store.get_claim(request.claim_id)
+        claim_doc = store.get_claim(claim_id)
         if not claim_doc:
-            raise PDFExtractionError(f"Claim {request.claim_id} not found in Firestore")
+            raise PDFExtractionError(f"Claim {claim_id} not found in Firestore")
 
         patient_info = request.patient_info.model_dump() if request.patient_info else {
             "first_name": claim_doc.get("patientFName", ""),
@@ -81,11 +91,22 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         if not policy_document_url:
             raise PDFExtractionError("Policy document has no file_url")
 
-        # Step 1 + 2: extract PDFs
+        # Step 1: medical report
+        broker.publish(claim_id, {
+            "type": "step",
+            "step": "pdf_medical",
+            "message": "Reading the medical report…",
+        })
         logger.info(f"[{analysis_id}] Extracting medical report from {medical_report_url[:80]}…")
         medical_text = await pdf_service.extract_text(medical_report_url)
         logger.info(f"[{analysis_id}] Medical report: {len(medical_text)} chars")
 
+        # Step 2: policy document
+        broker.publish(claim_id, {
+            "type": "step",
+            "step": "pdf_policy",
+            "message": "Reading the policy document…",
+        })
         logger.info(f"[{analysis_id}] Extracting policy document from {policy_document_url[:80]}…")
         policy_text = await pdf_service.extract_text(policy_document_url)
         logger.info(f"[{analysis_id}] Policy document: {len(policy_text)} chars")
@@ -93,15 +114,25 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         supporting_text = ""
         supporting_url = claim_doc.get("supportingDocuments")
         if supporting_url and supporting_url not in ("some URL", ""):
+            broker.publish(claim_id, {
+                "type": "step",
+                "step": "pdf_supporting",
+                "message": "Reading supporting documents…",
+            })
             try:
                 supporting_text = await pdf_service.extract_text(supporting_url)
                 logger.info(f"[{analysis_id}] Supporting documents: {len(supporting_text)} chars")
             except Exception as e:
                 logger.warning(f"[{analysis_id}] Supporting documents extraction failed (non-fatal): {e}")
 
-        # Step 3 + 4: build prompt and call Gemini
+        # Step 3 + 4: Gemini analysis (single-shot JSON)
+        broker.publish(claim_id, {
+            "type": "step",
+            "step": "llm_analysis",
+            "message": "Analyzing the claim against the policy…",
+        })
         prompt = build_analysis_prompt(
-            claim_id=request.claim_id,
+            claim_id=claim_id,
             patient_info=patient_info,
             treatment_type=treatment_type,
             medical_report_text=medical_text,
@@ -114,9 +145,27 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         )
         parsed = _validate_llm_response(llm_raw)
 
-        # Step 5: draft response
+        # Emit the structured analysis as a single event so the UI can render
+        # the decision pill, clauses, and reasoning immediately.
+        broker.publish(claim_id, {
+            "type": "analysis",
+            "data": {
+                "coverage_decision": parsed["coverage_decision"],
+                "confidence_score": parsed["confidence_score"],
+                "applicable_clauses": parsed["applicable_clauses"],
+                "reasoning": parsed["reasoning"],
+                "flags": parsed["flags"],
+            },
+        })
+
+        # Step 5: draft response — streamed for not_covered, hardcoded for covered
+        broker.publish(claim_id, {
+            "type": "step",
+            "step": "llm_draft",
+            "message": "Generating the draft response…",
+        })
         draft_text = await response_service.generate_draft(
-            claim_id=request.claim_id,
+            claim_id=claim_id,
             patient_info=patient_info,
             treatment_type=treatment_type,
             coverage_decision=parsed["coverage_decision"],
@@ -127,11 +176,14 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
 
         # Step 6: persist + cache
         store.update_claim_with_ai_result(
-            claim_id=request.claim_id,
+            claim_id=claim_id,
             ai_decision=parsed["coverage_decision"],
             ai_message=parsed["reasoning"],
             ai_draft=draft_text,
             ai_draft_original=draft_text,
+            ai_confidence=parsed["confidence_score"],
+            ai_clauses=parsed["applicable_clauses"],
+            ai_flags=parsed["flags"],
         )
 
         elapsed = round(time.time() - started, 2)
@@ -146,15 +198,16 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
             "processing_time_seconds": elapsed,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
-        store.save_analysis(request.claim_id, record)
+        store.save_analysis(claim_id, record)
+        broker.publish(claim_id, {"type": "complete", "data": record})
         logger.info(f"[{analysis_id}] Completed in {elapsed}s — decision={parsed['coverage_decision']}")
 
     except (PDFExtractionError, PDFDownloadError) as e:
-        _fail(record, request.claim_id, started, f"PDF processing error: {e}")
+        _fail(record, claim_id, started, f"PDF processing error: {e}")
     except (LLMServiceError, LLMResponseParsingError) as e:
-        _fail(record, request.claim_id, started, f"LLM error: {e}")
+        _fail(record, claim_id, started, f"LLM error: {e}")
     except Exception as e:
-        _fail(record, request.claim_id, started, f"Unexpected error: {e}")
+        _fail(record, claim_id, started, f"Unexpected error: {e}")
 
 
 def _fail(record: dict, claim_id: str, started: float, message: str) -> None:
@@ -166,6 +219,7 @@ def _fail(record: dict, claim_id: str, started: float, message: str) -> None:
         "completed_at": datetime.now(timezone.utc).isoformat(),
     })
     store.save_analysis(claim_id, record)
+    broker.publish(claim_id, {"type": "error", "message": message})
 
 
 def _validate_llm_response(response: dict) -> dict:
@@ -221,10 +275,10 @@ def get_analysis_result(claim_id: str) -> dict:
             "examiner_id": claim.get("examinerID", ""),
             "status": "completed",
             "coverage_decision": claim.get("aiDecision"),
-            "confidence_score": None,
-            "applicable_clauses": None,
+            "confidence_score": claim.get("aiConfidence"),
+            "applicable_clauses": claim.get("aiClauses"),
             "reasoning": claim.get("aiMessage"),
-            "flags": None,
+            "flags": claim.get("aiFlags"),
             "draft_response": claim.get("aiDraft"),
             "ai_model_used": None,
             "processing_time_seconds": None,

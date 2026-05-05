@@ -6,11 +6,15 @@ Reuses require_examiner from api.examiner so the same Firebase ID token used by
 the rest of the examiner UI is the only credential needed.
 """
 
+import json
+import logging
 from datetime import datetime, timezone
 from http import HTTPStatus
+from typing import AsyncIterator
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from app.api.examiner import require_examiner
 from app.core.config import settings
@@ -25,8 +29,10 @@ from app.models.ai_analysis import (
     HealthCheckResponse,
 )
 from app.services.ai import analysis_service, response_service
+from app.services.ai.events import broker
 from app.services.ai.exceptions import AnalysisNotFoundError, DraftNotFoundError
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -62,6 +68,46 @@ async def trigger_analysis(
         analysis_id=analysis_id,
         claim_id=data.claim_id,
         status="pending",
+    )
+
+
+@router.get(
+    "/analysis/{claim_id}/stream",
+    summary="Live progress stream of an in-flight AI analysis (NDJSON)",
+)
+async def stream_analysis(
+    claim_id: str,
+    examiner: dict = Depends(require_examiner),
+) -> StreamingResponse:
+    """
+    Stream AI progress events as newline-delimited JSON.
+
+    Each line is a JSON object with one of these shapes:
+      {"type":"step", "step":"pdf_medical|pdf_policy|pdf_supporting|llm_analysis|llm_draft|started", "message":"…"}
+      {"type":"analysis", "data":{coverage_decision, confidence_score, applicable_clauses, reasoning, flags}}
+      {"type":"draft_chunk", "text":"…"}
+      {"type":"complete", "data":{full record}}
+      {"type":"error", "message":"…"}
+    """
+
+    async def gen() -> AsyncIterator[bytes]:
+        # Initial heartbeat so the browser flushes headers immediately
+        yield (json.dumps({"type": "open", "claim_id": claim_id}) + "\n").encode("utf-8")
+        try:
+            async for event in broker.subscribe(claim_id):
+                yield (json.dumps(event) + "\n").encode("utf-8")
+        except Exception as e:
+            logger.exception("stream_analysis aborted")
+            yield (json.dumps({"type": "error", "message": str(e)}) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        gen(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 

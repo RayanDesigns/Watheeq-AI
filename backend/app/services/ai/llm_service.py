@@ -3,7 +3,8 @@
 import asyncio
 import json
 import logging
-from typing import Optional
+import queue as sync_queue
+from typing import AsyncIterator, Callable, Optional
 
 from google import genai
 from google.genai import types
@@ -154,3 +155,85 @@ async def generate_text(user_prompt: str, system_prompt: str, max_retries: int =
                     break
 
     raise LLMServiceError(f"Gemini text call failed after trying all models {_model_chain()}: {last_error}")
+
+
+async def stream_text(
+    user_prompt: str,
+    system_prompt: str,
+    on_chunk: Optional[Callable[[str], None]] = None,
+) -> str:
+    """
+    Stream text from Gemini, calling `on_chunk(text)` for each token batch.
+    Returns the full concatenated text. Tries the model chain on overload errors.
+    """
+    last_error: Optional[Exception] = None
+
+    for model in _model_chain():
+        try:
+            full = await _stream_one_model(model, system_prompt, user_prompt, on_chunk)
+            return full
+        except Exception as e:
+            last_error = e
+            if _is_overloaded(e) or _is_transient(e):
+                logger.warning(f"Stream on {model} failed ({e}); trying next fallback")
+                continue
+            logger.error(f"Stream on {model} failed: {e}")
+            break
+
+    raise LLMServiceError(f"Gemini streaming failed after trying all models {_model_chain()}: {last_error}")
+
+
+async def _stream_one_model(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    on_chunk: Optional[Callable[[str], None]],
+) -> str:
+    """Run one streaming attempt for a specific model and return the full text."""
+    q: sync_queue.Queue = sync_queue.Queue()
+    SENTINEL = object()
+
+    def producer() -> None:
+        try:
+            client = _get_client()
+            stream = client.models.generate_content_stream(
+                model=model,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0.3,
+                    max_output_tokens=settings.LLM_MAX_TOKENS,
+                ),
+            )
+            for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    q.put(text)
+        except Exception as exc:
+            q.put(exc)
+        finally:
+            q.put(SENTINEL)
+
+    producer_task = asyncio.create_task(asyncio.to_thread(producer))
+
+    full_parts: list[str] = []
+    try:
+        while True:
+            item = await asyncio.to_thread(q.get)
+            if item is SENTINEL:
+                break
+            if isinstance(item, Exception):
+                raise item
+            full_parts.append(item)
+            if on_chunk is not None:
+                try:
+                    on_chunk(item)
+                except Exception as cb_err:
+                    logger.warning(f"on_chunk callback raised (non-fatal): {cb_err}")
+    finally:
+        await producer_task
+
+    text = "".join(full_parts).strip()
+    if not text:
+        raise LLMServiceError("Gemini stream returned empty text")
+    return text

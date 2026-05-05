@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.services.ai import llm_service, store
+from app.services.ai.events import broker
 from app.services.ai.exceptions import DraftNotFoundError
 from app.services.ai.prompts import (
     DRAFT_RESPONSE_SYSTEM_PROMPT,
@@ -30,11 +31,13 @@ async def generate_draft(
     applicable_clauses: list,
     flags: list,
 ) -> str:
-    """Produce a draft response. Hardcoded for 'covered'; AI-generated for 'not_covered'."""
+    """Produce a draft response. Hardcoded for 'covered'; streamed AI text for 'not_covered'."""
     logger.info(f"Generating draft for claim {claim_id} (decision={coverage_decision})")
 
     if coverage_decision == "covered":
         draft_text = APPROVAL_STATEMENT
+        # Emit the whole hardcoded message in one chunk so the UI animates uniformly.
+        broker.publish(claim_id, {"type": "draft_chunk", "text": draft_text})
     else:
         prompt = build_draft_response_prompt(
             patient_info=patient_info,
@@ -44,10 +47,19 @@ async def generate_draft(
             applicable_clauses=applicable_clauses,
             flags=flags,
         )
-        draft_text = await llm_service.generate_text(
-            user_prompt=prompt,
-            system_prompt=DRAFT_RESPONSE_SYSTEM_PROMPT,
-        )
+        try:
+            draft_text = await llm_service.stream_text(
+                user_prompt=prompt,
+                system_prompt=DRAFT_RESPONSE_SYSTEM_PROMPT,
+                on_chunk=lambda piece: broker.publish(claim_id, {"type": "draft_chunk", "text": piece}),
+            )
+        except Exception as stream_err:
+            logger.warning(f"Streaming draft failed ({stream_err}); falling back to non-streaming")
+            draft_text = await llm_service.generate_text(
+                user_prompt=prompt,
+                system_prompt=DRAFT_RESPONSE_SYSTEM_PROMPT,
+            )
+            broker.publish(claim_id, {"type": "draft_chunk", "text": draft_text})
 
     now = datetime.now(timezone.utc).isoformat()
     store.save_draft(claim_id, {
