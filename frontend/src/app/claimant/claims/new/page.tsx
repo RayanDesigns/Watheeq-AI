@@ -216,23 +216,27 @@ export default function NewClaimPage() {
           </div>
           <div><FieldLabel>Treatment Type *</FieldLabel><input className={inputClass} style={inputStyle} placeholder="e.g. Physiotherapy, Surgery, Diagnostic Imaging" value={form.treatmentType} onChange={setField("treatmentType")} /></div>
 
-          <UploadZone
-            label="Medical Report *"
-            isRequired={true}
-            uploadedUrl={medUrl}
-            onUploadComplete={setMedUrl}
-            getToken={getToken}
-            endpoint="/api/claims/upload-medical-report"
-          />
+          <div data-testid="upload-medical-report">
+            <UploadZone
+              label="Medical Report *"
+              isRequired={true}
+              uploadedUrl={medUrl}
+              onUploadComplete={setMedUrl}
+              getToken={getToken}
+              endpoint="/api/claims/upload-medical-report"
+            />
+          </div>
 
-          <UploadZone
-            label="Supporting Documents"
-            isRequired={false}
-            uploadedUrl={docsUrl}
-            onUploadComplete={setDocsUrl}
-            getToken={getToken}
-            endpoint="/api/claims/upload-supporting-docs"
-          />
+          <div data-testid="upload-supporting-docs">
+            <UploadZone
+              label="Supporting Documents"
+              isRequired={false}
+              uploadedUrl={docsUrl}
+              onUploadComplete={setDocsUrl}
+              getToken={getToken}
+              endpoint="/api/claims/upload-supporting-docs"
+            />
+          </div>
         </div>
 
         {/* Submit */}

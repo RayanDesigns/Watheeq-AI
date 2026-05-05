@@ -1,11 +1,16 @@
 import sys
+from uuid import uuid4
 from typing import Literal
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel
 from firebase_admin import auth as firebase_auth
 from google.cloud.firestore_v1 import transaction as fs_transaction
 from app.services.firestore_client import get_db
 from app.services.claims_service import notify_claim_decision
+from datetime import datetime, timezone
+from app.services.ai import analysis_service, store as ai_store
+from app.models.ai_analysis import AnalysisTriggerRequest
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -122,13 +127,21 @@ class PickResponse(BaseModel):
 
 
 @router.post("/claims/{claim_id}/pick", summary="Pick and lock a submitted claim", response_model=PickResponse)
-def pick_claim(claim_id: str, examiner: dict = Depends(require_examiner)):
+def pick_claim(
+    claim_id: str,
+    background_tasks: BackgroundTasks,
+    examiner: dict = Depends(require_examiner),
+):
     """
     Atomically transitions a claim from 'submitted' → 'under review' and
     sets examinerID to the caller's UID.
 
     Uses a Firestore transaction to prevent two examiners from picking the
     same claim simultaneously (first write wins; second gets a 409).
+
+    On success, queues the AI analysis pipeline as a background task so
+    the frontend can start polling /api/examiner/ai/analysis/{claim_id}
+    immediately without a separate trigger call.
     """
     uid = examiner["uid"]
     db = get_db()
@@ -152,12 +165,47 @@ def pick_claim(claim_id: str, examiner: dict = Depends(require_examiner)):
                 detail="This claim has already been picked by another examiner"
             )
 
-        txn.update(ref, {"status": "under review", "examinerID": uid})
+        txn.update(ref, {
+            "status": "under review",
+            "examinerID": uid,
+            "aiDecision": "",
+            "aiMessage": "",
+            "aiDraft": "",
+            "aiDraftOriginal": "",
+        })
 
     txn = db.transaction()
     _do_pick(txn)
-
     print(f"[Examiner] Picked claim={claim_id} by examiner={uid}", file=sys.stderr)
+
+    analysis_id = str(uuid4())
+    ai_store.save_analysis(claim_id, {
+        "analysis_id": analysis_id,
+        "claim_id": claim_id,
+        "examiner_id": uid,
+        "status": "pending",
+        "ai_model_used": settings.LLM_MODEL,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "coverage_decision": None,
+        "confidence_score": None,
+        "applicable_clauses": None,
+        "reasoning": None,
+        "flags": None,
+        "draft_response": None,
+        "processing_time_seconds": None,
+        "error_message": None,
+    })
+    background_tasks.add_task(
+        analysis_service.run_analysis,
+        analysis_id,
+        AnalysisTriggerRequest(claim_id=claim_id, examiner_id=uid),
+    )
+    print(
+        f"[Examiner] AI analysis queued analysis_id={analysis_id} for claim={claim_id}",
+        file=sys.stderr,
+    )
+
     return {"success": True, "claimId": claim_id}
 
 

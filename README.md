@@ -18,6 +18,7 @@ Anything downloadable or generated should **not** be committed. Run `npm install
 - **Firebase** project ([console.firebase.google.com](https://console.firebase.google.com))
 - **Authintica** account for SMS OTP ([authentica.sa](https://authentica.sa))
 - **Cloudinary** account for file storage ([cloudinary.com](https://cloudinary.com))
+- **Google Gemini API key** for AI claim analysis ([aistudio.google.com/apikey](https://aistudio.google.com/apikey))
 
 ## Project Structure
 
@@ -103,9 +104,19 @@ APP_URL=http://localhost:3000
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
+
+# Google Gemini (AI claim analysis — examiner workflow)
+GEMINI_API_KEY=
+LLM_MODEL=gemini-3.1-flash-lite-preview
+# Optional tuning (defaults shown)
+# LLM_TEMPERATURE=0.1
+# LLM_MAX_TOKENS=4000
+# MAX_PDF_SIZE_MB=20
 ```
 
 > **Cloudinary setup**: Create an account at [cloudinary.com](https://cloudinary.com). Find your credentials in the Dashboard. In **Settings → Security**, enable **PDF and ZIP files delivery** otherwise PDF downloads will be blocked.
+
+> **Gemini setup**: Get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) and put it in `GEMINI_API_KEY`. The default model `gemini-3.1-flash-lite-preview` falls back automatically to `gemini-2.5-flash` → `gemini-2.5-flash-lite` → `gemini-2.0-flash-lite` if the primary is overloaded. Without a key the AI panel in the examiner UI will show an error but the rest of the app still works.
 
 > **Gmail app password**: Go to Google Account → Security → 2-Step Verification → App passwords. Generate a password for "Mail" and use it as `SMTP_PASSWORD`. Do NOT use your regular Gmail password.
 
@@ -147,6 +158,8 @@ Backend: [http://localhost:8000](http://localhost:8000)
 | `CLOUDINARY_CLOUD_NAME` | backend/.env | Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | backend/.env | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | backend/.env | Cloudinary API secret |
+| `GEMINI_API_KEY` | backend/.env | Google Gemini key for AI claim analysis |
+| `LLM_MODEL` | backend/.env | Primary Gemini model (default `gemini-3.1-flash-lite-preview`) |
 
 ## Docs
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetchAuth } from "@/lib/apiClient";
+import { apiFetchAuth, API_BASE_URL } from "@/lib/apiClient";
 
 type ClaimStatus = "submitted" | "under review" | "approved" | "rejected" | "cancelled";
 type Decision = "approved" | "rejected";
@@ -22,6 +22,30 @@ interface Claim {
   submittingTime: string;
   examinerID: string;
   examinerResponse?: string;
+  aiDecision?: string;
+  aiMessage?: string;
+  aiDraft?: string;
+  aiDraftOriginal?: string;
+}
+
+type AICoverage = "covered" | "not_covered";
+type AIStatus = "pending" | "processing" | "completed" | "failed";
+
+interface AIClause {
+  clause_id: string;
+  clause_text: string;
+  relevance: string;
+}
+
+interface AIAnalysis {
+  status: AIStatus;
+  coverage_decision: AICoverage | null;
+  confidence_score: number | null;
+  applicable_clauses: AIClause[] | null;
+  reasoning: string | null;
+  flags: string[] | null;
+  draft_response: string | null;
+  error_message: string | null;
 }
 
 const STATUS_CONFIG: Record<ClaimStatus, { label: string; bg: string; color: string; dot: string; desc: string }> = {
@@ -103,6 +127,42 @@ export default function ExaminerClaimDetailPage() {
   const [deciding, setDeciding] = useState(false);
   const [decideError, setDecideError] = useState("");
 
+  // AI analysis state
+  const [ai, setAI] = useState<AIAnalysis | null>(null);
+  const [aiError, setAIError] = useState("");
+  const [aiTriggering, setAITriggering] = useState(false);
+
+  // Live-streaming state (NDJSON event stream)
+  type AIPhase =
+    | "idle"
+    | "started"
+    | "pdf_medical"
+    | "pdf_policy"
+    | "pdf_supporting"
+    | "llm_analysis"
+    | "llm_draft"
+    | "done"
+    | "failed";
+
+  const PHASE_COPY: Record<AIPhase, string> = {
+    idle: "",
+    started: "Starting AI analysis…",
+    pdf_medical: "Reading the medical report…",
+    pdf_policy: "Reading the policy document…",
+    pdf_supporting: "Reading supporting documents…",
+    llm_analysis: "Analyzing the claim against the policy…",
+    llm_draft: "Drafting the response…",
+    done: "Done.",
+    failed: "Failed.",
+  };
+
+  const [aiPhase, setAIPhase] = useState<AIPhase>("idle");
+  const [streamingDraft, setStreamingDraft] = useState("");
+  const [draftStreaming, setDraftStreaming] = useState(false);
+  // Holds the prompt-built draft separate from the textarea so the examiner
+  // can keep typing while tokens are still arriving.
+  const examinerEditedRef = useRef(false);
+
   useEffect(() => {
     if (!user || !id) return;
     setLoading(true);
@@ -111,16 +171,232 @@ export default function ExaminerClaimDetailPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Failed to load claim");
         setClaim(data);
+        if (typeof data.aiDraft === "string" && data.aiDraft) {
+          setExaminerResponse(data.aiDraft);
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [user, id]);
+
+  // ── AI: live event stream (NDJSON) ─────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !claim) return;
+    const isMyClaim = claim.examinerID === (profile?.uid ?? "");
+    if (!isMyClaim) return;
+    if (claim.status !== "under review") return;
+
+    // If the analysis already finished and was persisted on the claim doc, just hydrate from it.
+    if (claim.aiDecision) {
+      setAI({
+        status: "completed",
+        coverage_decision: (claim.aiDecision as AICoverage) || null,
+        confidence_score: null,
+        applicable_clauses: null,
+        reasoning: claim.aiMessage ?? null,
+        flags: null,
+        draft_response: claim.aiDraft ?? null,
+        error_message: null,
+      });
+      setAIPhase("done");
+      if (!examinerEditedRef.current && claim.aiDraft) {
+        setExaminerResponse(claim.aiDraft);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let abortController: AbortController | null = null;
+    let completedHandled = false;
+
+    const refetchClaim = async () => {
+      try {
+        const res = await apiFetchAuth(`/api/examiner/claims/${claim.claimId}`, user);
+        if (!res.ok) return;
+        const fresh = await res.json();
+        if (!cancelled) setClaim(fresh);
+      } catch {
+        // non-fatal
+      }
+    };
+
+    const handleEvent = (ev: { type: string; [k: string]: unknown }) => {
+      if (cancelled) return;
+      switch (ev.type) {
+        case "open":
+          setAIPhase((p) => (p === "idle" ? "started" : p));
+          setAI((prev) => prev ?? {
+            status: "processing",
+            coverage_decision: null, confidence_score: null,
+            applicable_clauses: null, reasoning: null, flags: null,
+            draft_response: null, error_message: null,
+          });
+          break;
+        case "step": {
+          const step = (ev as { step?: string }).step;
+          if (step && step in PHASE_COPY) setAIPhase(step as AIPhase);
+          if (step === "llm_draft") {
+            setStreamingDraft("");
+            setDraftStreaming(true);
+          }
+          break;
+        }
+        case "analysis": {
+          const data = (ev as unknown as { data: AIAnalysis & { coverage_decision: AICoverage } }).data;
+          setAI((prev) => ({
+            ...(prev ?? {
+              status: "processing", coverage_decision: null, confidence_score: null,
+              applicable_clauses: null, reasoning: null, flags: null,
+              draft_response: null, error_message: null,
+            }),
+            status: "processing",
+            coverage_decision: data.coverage_decision,
+            confidence_score: data.confidence_score ?? null,
+            applicable_clauses: data.applicable_clauses ?? null,
+            reasoning: data.reasoning ?? null,
+            flags: data.flags ?? null,
+          }));
+          break;
+        }
+        case "draft_chunk": {
+          const piece = String((ev as { text?: string }).text ?? "");
+          if (!piece) break;
+          setStreamingDraft((prev) => prev + piece);
+          if (!examinerEditedRef.current) {
+            setExaminerResponse((prev) => prev + piece);
+          }
+          break;
+        }
+        case "complete": {
+          const data = (ev as unknown as { data: AIAnalysis & { coverage_decision: AICoverage } }).data;
+          setAI({
+            status: "completed",
+            coverage_decision: data.coverage_decision ?? null,
+            confidence_score: data.confidence_score ?? null,
+            applicable_clauses: data.applicable_clauses ?? null,
+            reasoning: data.reasoning ?? null,
+            flags: data.flags ?? null,
+            draft_response: data.draft_response ?? null,
+            error_message: null,
+          });
+          setDraftStreaming(false);
+          setAIPhase("done");
+          if (!examinerEditedRef.current && data.draft_response) {
+            setExaminerResponse(data.draft_response);
+          }
+          if (!completedHandled) {
+            completedHandled = true;
+            refetchClaim();
+          }
+          break;
+        }
+        case "error": {
+          const message = String((ev as { message?: string }).message ?? "AI analysis failed");
+          setAI((prev) => ({
+            ...(prev ?? {
+              coverage_decision: null, confidence_score: null,
+              applicable_clauses: null, reasoning: null, flags: null,
+              draft_response: null,
+            }),
+            status: "failed",
+            coverage_decision: prev?.coverage_decision ?? null,
+            confidence_score: prev?.confidence_score ?? null,
+            applicable_clauses: prev?.applicable_clauses ?? null,
+            reasoning: prev?.reasoning ?? null,
+            flags: prev?.flags ?? null,
+            draft_response: prev?.draft_response ?? null,
+            error_message: message,
+          }));
+          setDraftStreaming(false);
+          setAIPhase("failed");
+          setAIError(message);
+          break;
+        }
+        default:
+          break;
+      }
+    };
+
+    const consume = async () => {
+      try {
+        setAIError("");
+        setAIPhase("started");
+        setAI({
+          status: "processing",
+          coverage_decision: null, confidence_score: null,
+          applicable_clauses: null, reasoning: null, flags: null,
+          draft_response: null, error_message: null,
+        });
+
+        const idToken = await user.getIdToken();
+        abortController = new AbortController();
+        const res = await fetch(`${API_BASE_URL}/api/examiner/ai/analysis/${claim.claimId}/stream`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+          signal: abortController.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          throw new Error(`Stream failed: HTTP ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let nl: number;
+          // eslint-disable-next-line no-cond-assign
+          while ((nl = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, nl).trim();
+            buffer = buffer.slice(nl + 1);
+            if (!line) continue;
+            try {
+              handleEvent(JSON.parse(line));
+            } catch (parseErr) {
+              console.warn("[AI stream] bad line:", line, parseErr);
+            }
+          }
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const aborted =
+          (err as DOMException)?.name === "AbortError" ||
+          (typeof err === "object" && err !== null && "name" in err && (err as { name: string }).name === "AbortError");
+        if (!aborted) {
+          setAIError(err instanceof Error ? err.message : "AI stream failed");
+          setAIPhase("failed");
+        }
+      }
+    };
+
+    consume();
+
+    return () => {
+      cancelled = true;
+      abortController?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, claim?.claimId, claim?.status, claim?.examinerID, claim?.aiDecision, profile?.uid]);
 
   const handleDecide = async () => {
     if (!user || !claim || !pendingDecision) return;
     setDecideError("");
     setDeciding(true);
     try {
+      // Persist any examiner edits to the AI draft before deciding (so the audit trail records them)
+      if (ai && ai.draft_response && examinerResponse && examinerResponse !== ai.draft_response) {
+        try {
+          await apiFetchAuth(`/api/examiner/ai/responses/${claim.claimId}/draft`, user, {
+            method: "PUT",
+            body: JSON.stringify({ edited_response: examinerResponse }),
+          });
+        } catch {
+          // Non-fatal — proceed with the decision regardless
+        }
+      }
+
       const res = await apiFetchAuth(`/api/examiner/claims/${id}/decide`, user, {
         method: "PATCH",
         body: JSON.stringify({ decision: pendingDecision, examinerResponse }),
@@ -134,6 +410,43 @@ export default function ExaminerClaimDetailPage() {
       setDecideError(err instanceof Error ? err.message : "Decision failed");
     } finally {
       setDeciding(false);
+    }
+  };
+
+  const handleRetryAI = async () => {
+    if (!user || !claim) return;
+    setAIError("");
+    setAITriggering(true);
+    setAIPhase("started");
+    setStreamingDraft("");
+    setDraftStreaming(false);
+    examinerEditedRef.current = false;
+    setExaminerResponse("");
+    try {
+      // Re-trigger the analysis. The stream useEffect re-runs because we clear
+      // claim.aiDecision so the live progress events flow back into the UI.
+      const res = await apiFetchAuth(`/api/examiner/ai/analysis/trigger`, user, {
+        method: "POST",
+        body: JSON.stringify({ claim_id: claim.claimId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to trigger AI analysis");
+      setAI({
+        status: data.status ?? "pending",
+        coverage_decision: null,
+        confidence_score: null,
+        applicable_clauses: null,
+        reasoning: null,
+        flags: null,
+        draft_response: null,
+        error_message: null,
+      });
+      // Force the streaming useEffect to re-bind by clearing the persisted decision
+      setClaim((prev) => prev ? { ...prev, aiDecision: "", aiMessage: "", aiDraft: "", aiDraftOriginal: "" } : prev);
+    } catch (err) {
+      setAIError(err instanceof Error ? err.message : "AI retry failed");
+    } finally {
+      setAITriggering(false);
     }
   };
 
@@ -305,33 +618,176 @@ export default function ExaminerClaimDetailPage() {
         </div>
       )}
 
-      {/* ── Examiner POV / Response ── */}
+      {/* ── AI Analysis + Examiner Response ── */}
       {canDecide && (
         <div
           className="rounded-2xl border mb-5"
           style={{ background: "#fff", borderColor: "#e2e2ee", boxShadow: "0 1px 3px rgba(5,5,8,0.04)" }}
         >
-          <div className="px-6 pt-5 pb-3 border-b" style={{ borderColor: "#f0f0f5" }}>
+          <div className="px-6 pt-5 pb-3 border-b flex items-center justify-between gap-3" style={{ borderColor: "#f0f0f5" }}>
             <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#0004E8" }}>
-              Examiner POV
+              AI Analysis (Watheeq AI)
             </p>
+            {ai && (ai.status === "completed" || ai.status === "failed") && (
+              <button
+                onClick={handleRetryAI}
+                disabled={aiTriggering}
+                className="text-[11px] font-semibold uppercase tracking-widest hover:opacity-70 disabled:opacity-40"
+                style={{ color: "rgba(5,5,8,0.45)" }}
+              >
+                {aiTriggering ? "Re-running…" : "Re-run analysis"}
+              </button>
+            )}
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
-              <Field label="AI Decision" value="Approved (Placeholder)" />
-              <Field label="AI Message" value="This claim meets the basic policy requirements. (Placeholder)" />
-            </div>
+            {/* Live phase banner — visible while the analysis is in flight */}
+            {ai && ai.status !== "completed" && ai.status !== "failed" && (
+              <div className="flex items-start gap-3 px-4 py-3 mb-5 rounded-xl" style={{ background: "rgba(0,4,232,0.04)", border: "1px solid rgba(0,4,232,0.12)" }}>
+                <svg className="animate-spin h-4 w-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" style={{ color: "#0004E8" }}>
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <div className="flex-1">
+                  <AnimatePresence mode="wait">
+                    <motion.p
+                      key={aiPhase}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.18 }}
+                      className="text-[13px] font-medium"
+                      style={{ color: "#0004E8" }}
+                    >
+                      {PHASE_COPY[aiPhase] || "AI is reviewing the claim…"}
+                    </motion.p>
+                  </AnimatePresence>
+                  <p className="text-[11px] mt-1" style={{ color: "rgba(0,4,232,0.55)" }}>
+                    Live · streaming from {aiPhase === "llm_draft" ? "draft generation" : "Gemini"}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {ai && ai.status === "failed" && (
+              <div className="flex items-center gap-3 px-4 py-3 mb-5 rounded-xl" style={{ background: "rgba(220,38,38,0.06)", border: "1px solid #fca5a5" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" className="flex-shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <p className="text-[13px]" style={{ color: "#dc2626" }}>
+                  AI analysis failed{ai.error_message ? `: ${ai.error_message}` : ""}.
+                </p>
+              </div>
+            )}
+
+            {aiError && (
+              <p className="text-[12px] mb-4" style={{ color: "#dc2626" }}>{aiError}</p>
+            )}
+
+            {/* AI result fields — render progressively as the stream populates them */}
+            {ai && ai.coverage_decision && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-1" style={{ color: "rgba(5,5,8,0.35)" }}>
+                      AI Decision
+                    </p>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold uppercase"
+                      style={{
+                        background: ai.coverage_decision === "covered" ? "rgba(22,163,74,0.10)" : "rgba(220,38,38,0.10)",
+                        color: ai.coverage_decision === "covered" ? "#15803d" : "#dc2626",
+                      }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: ai.coverage_decision === "covered" ? "#16a34a" : "#dc2626" }} />
+                      {ai.coverage_decision === "covered" ? "Covered" : "Not covered"}
+                    </span>
+                  </div>
+                  {typeof ai.confidence_score === "number" && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-widest mb-1" style={{ color: "rgba(5,5,8,0.35)" }}>
+                        Confidence
+                      </p>
+                      <p className="text-[14px]" style={{ color: "#050508" }}>
+                        {(ai.confidence_score * 100).toFixed(0)}%
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {ai.reasoning && (
+                  <div className="mb-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(5,5,8,0.35)" }}>
+                      AI Reasoning
+                    </p>
+                    <p className="text-[13px] leading-relaxed" style={{ color: "#050508" }}>
+                      {ai.reasoning}
+                    </p>
+                  </div>
+                )}
+
+                {ai.applicable_clauses && ai.applicable_clauses.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(5,5,8,0.35)" }}>
+                      Cited Policy Clauses
+                    </p>
+                    <ul className="space-y-3">
+                      {ai.applicable_clauses.map((c, i) => (
+                        <li key={i} className="rounded-xl p-3" style={{ background: "#f9f9fc", border: "1px solid #f0f0f5" }}>
+                          <p className="text-[12px] font-semibold mb-1" style={{ color: "#0004E8" }}>{c.clause_id}</p>
+                          <p className="text-[13px] mb-1.5" style={{ color: "#050508" }}>&ldquo;{c.clause_text}&rdquo;</p>
+                          <p className="text-[12px]" style={{ color: "rgba(5,5,8,0.55)" }}>{c.relevance}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {ai.flags && ai.flags.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: "#b45309" }}>
+                      Flags for Manual Review
+                    </p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {ai.flags.map((f, i) => (
+                        <li key={i} className="text-[13px]" style={{ color: "#b45309" }}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <p className="text-[11px] italic mb-5" style={{ color: "rgba(5,5,8,0.4)" }}>
+                  AI-assisted analysis. Review the cited clauses and adjust the response below before submitting your decision.
+                </p>
+              </>
+            )}
+
+            {/* Editable draft / examiner response */}
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: "rgba(5,5,8,0.35)" }}>
-                Examiner Response (Optional)
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "rgba(5,5,8,0.35)" }}>
+                  {(ai && ai.draft_response) || streamingDraft
+                    ? "AI Draft Response (editable)"
+                    : "Examiner Response (Optional)"}
+                </p>
+                {draftStreaming && (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#0004E8" }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#0004E8" }} />
+                    Streaming
+                  </span>
+                )}
+              </div>
               <textarea
                 className="w-full rounded-xl border p-3 text-[14px] focus:outline-none focus:ring-2 focus:ring-[#0004E8]"
                 style={{ borderColor: "#e2e2ee", color: "#050508", background: "#f9f9fc" }}
-                rows={3}
-                placeholder="Enter response here..."
+                rows={(ai && ai.draft_response) || streamingDraft ? 6 : 3}
+                placeholder={(ai && ai.draft_response) || streamingDraft
+                  ? "Edit the AI draft before sending…"
+                  : "Enter response here..."}
                 value={examinerResponse}
-                onChange={(e) => setExaminerResponse(e.target.value)}
+                onChange={(e) => {
+                  examinerEditedRef.current = true;
+                  setExaminerResponse(e.target.value);
+                }}
               />
             </div>
           </div>
