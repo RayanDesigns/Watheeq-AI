@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
@@ -21,6 +21,291 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 const inputClass = "w-full px-3.5 py-2.5 rounded-xl border text-[14px] outline-none transition-all focus:ring-[3px] focus:ring-blue-100";
 const inputStyle = { borderColor: "#e8e8f0", color: "#050508" };
 function formatBytes(b: number) { return `${(b / 1048576).toFixed(1)} MB`; }
+
+// ── Custom Date Picker (YYYY/DD/MM) ───────────────────────────────────────────
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+function DatePickerInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // Internal state stores display values (unpadded). Emitted to backend as YYYY/DD/MM.
+  const [yyyy, setYyyy] = useState("");
+  const [mm, setMm]     = useState(""); // display order: 2nd
+  const [dd, setDd]     = useState(""); // display order: 3rd
+  const [open, setOpen]   = useState(false);
+  const [calYear, setCalYear]   = useState(new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(new Date().getMonth());
+  const [focused, setFocused]   = useState(false);
+  const yyyyRef = useRef<HTMLInputElement>(null);
+  const mmRef   = useRef<HTMLInputElement>(null);
+  const ddRef   = useRef<HTMLInputElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Sync inbound value (YYYY/DD/MM) → segment state
+  useEffect(() => {
+    if (value) {
+      const [y, d, m] = value.split("/");
+      setYyyy(y ?? ""); setDd(d ?? ""); setMm(m ?? "");
+    } else {
+      setYyyy(""); setMm(""); setDd("");
+    }
+  }, [value]);
+
+  // Emit: don't pad mid-keystroke to avoid cursor jumping. Padding happens on blur.
+  const emit = useCallback((y: string, d: string, m: string) => {
+    if (y.length === 4 && d !== "" && m !== "") {
+      onChange(`${y}/${d}/${m}`);
+    } else {
+      onChange("");
+    }
+  }, [onChange]);
+
+  // ── Segment handlers ──────────────────────────────────────────────────────
+  const handleYyyy = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+    setYyyy(v);
+    emit(v, dd, mm);
+    if (v.length === 4) mmRef.current?.focus();
+  };
+
+  const handleMm = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
+    setMm(raw);
+    emit(yyyy, dd, raw);
+    // Smart auto-advance: first digit > 1 means it can only be a 1-digit month (2–9)
+    if (raw.length === 2 || (raw.length === 1 && Number(raw) > 1)) {
+      ddRef.current?.focus();
+    }
+  };
+
+  const handleDd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 2);
+    setDd(raw);
+    emit(yyyy, raw, mm);
+  };
+
+  // Clamp and zero-pad MM/DD on blur so stored value is perfectly formatted
+  const blurMm = () => {
+    setFocused(false);
+    if (mm !== "") {
+      const clamped = String(Math.min(12, Math.max(1, Number(mm)))).padStart(2, "0");
+      setMm(clamped); emit(yyyy, dd, clamped);
+    }
+  };
+  const blurDd = () => {
+    setFocused(false);
+    if (dd !== "") {
+      const clamped = String(Math.min(31, Math.max(1, Number(dd)))).padStart(2, "0");
+      setDd(clamped); emit(yyyy, clamped, mm);
+    }
+  };
+
+  // Backspace navigation: DD → MM → YYYY
+  const handleDdKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && dd === "") mmRef.current?.focus();
+  };
+  const handleMmKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && mm === "") yyyyRef.current?.focus();
+  };
+
+  // Calendar day click
+  const pickCalDay = (day: number) => {
+    const y = String(calYear);
+    const d = String(day).padStart(2, "0");
+    const m = String(calMonth + 1).padStart(2, "0");
+    setYyyy(y); setDd(d); setMm(m);
+    onChange(`${y}/${d}/${m}`);
+    setOpen(false);
+  };
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const daysInMonth  = new Date(calYear, calMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+
+  const isFilled     = yyyy.length === 4 && mm !== "" && dd !== "";
+  const borderColor  = open || focused ? "#0004E8" : isFilled ? "#0004E8" : "#e8e8f0";
+  const ringStyle    = open || focused ? "0 0 0 3px rgba(0,4,232,0.12)" : "none";
+  const allEmpty     = !yyyy && !mm && !dd;
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      {/* Input row */}
+      <div
+        style={{
+          display: "flex", alignItems: "center",
+          border: `1px solid ${borderColor}`,
+          borderRadius: 12, background: "#fff",
+          boxShadow: ringStyle,
+          transition: "border-color 0.15s, box-shadow 0.15s",
+          padding: "0 14px", height: 44, cursor: "text",
+        }}
+        onClick={() => yyyyRef.current?.focus()}
+      >
+        {/* Calendar icon */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+          style={{ display: "flex", alignItems: "center", marginRight: 8, color: open ? "#0004E8" : "rgba(5,5,8,0.35)", transition: "color 0.15s", flexShrink: 0 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="3" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+
+        {/* "e.g." — same space always, visibility toggles so layout never shifts */}
+        <span style={{ fontSize: 13, color: "rgba(5,5,8,0.3)", marginRight: 2, flexShrink: 0, userSelect: "none", visibility: allEmpty ? "visible" : "hidden", width: allEmpty ? "auto" : 0, overflow: "hidden" }}>e.g.</span>
+
+        {/* YYYY */}
+        <input
+          ref={yyyyRef}
+          type="text" inputMode="numeric" maxLength={4} placeholder="2011"
+          value={yyyy}
+          onChange={handleYyyy}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{ width: 48, border: "none", outline: "none", fontSize: 14, color: yyyy ? "#050508" : "rgba(5,5,8,0.3)", background: "transparent", textAlign: "center", fontFamily: "inherit" }}
+        />
+        <span style={{ color: "rgba(5,5,8,0.3)", fontSize: 14, userSelect: "none", margin: "0 1px" }}>/</span>
+        {/* MM — shown second in UI */}
+        <input
+          ref={mmRef}
+          type="text" inputMode="numeric" maxLength={2} placeholder="7"
+          value={mm}
+          onChange={handleMm}
+          onKeyDown={handleMmKey}
+          onFocus={() => setFocused(true)}
+          onBlur={blurMm}
+          style={{ width: 26, border: "none", outline: "none", fontSize: 14, color: mm ? "#050508" : "rgba(5,5,8,0.3)", background: "transparent", textAlign: "center", fontFamily: "inherit" }}
+        />
+        <span style={{ color: "rgba(5,5,8,0.3)", fontSize: 14, userSelect: "none", margin: "0 1px" }}>/</span>
+        {/* DD — shown third in UI */}
+        <input
+          ref={ddRef}
+          type="text" inputMode="numeric" maxLength={2} placeholder="13"
+          value={dd}
+          onChange={handleDd}
+          onKeyDown={handleDdKey}
+          onFocus={() => setFocused(true)}
+          onBlur={blurDd}
+          style={{ width: 26, border: "none", outline: "none", fontSize: 14, color: dd ? "#050508" : "rgba(5,5,8,0.3)", background: "transparent", textAlign: "center", fontFamily: "inherit" }}
+        />
+
+        {/* Clear button */}
+        {isFilled && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setYyyy(""); setDd(""); setMm(""); onChange(""); }}
+            style={{ marginLeft: "auto", color: "rgba(5,5,8,0.3)", display: "flex", alignItems: "center", transition: "color 0.15s", flexShrink: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#dc2626")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(5,5,8,0.3)")}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Calendar dropdown */}
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 50,
+            background: "#fff", border: "1px solid #e8e8f0",
+            borderRadius: 16, padding: "16px 16px 12px",
+            boxShadow: "0 8px 32px rgba(5,5,8,0.12), 0 2px 8px rgba(5,5,8,0.06)",
+            minWidth: 280,
+          }}
+        >
+          {/* Header: Year dropdown + Month arrows */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+            {/* Year select */}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <select
+                value={calYear}
+                onChange={(e) => setCalYear(Number(e.target.value))}
+                style={{
+                  appearance: "none", WebkitAppearance: "none",
+                  border: "1px solid #e8e8f0", borderRadius: 8,
+                  background: "#fafafd", padding: "5px 28px 5px 10px",
+                  fontSize: 14, fontWeight: 600, color: "#050508",
+                  cursor: "pointer", outline: "none", fontFamily: "inherit",
+                }}
+              >
+                {Array.from({ length: 101 }, (_, i) => new Date().getFullYear() - 100 + i)
+                  .reverse()
+                  .map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+              </select>
+              {/* chevron */}
+              <svg style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "rgba(5,5,8,0.4)" }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </div>
+
+            {/* Month arrows + label */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button type="button"
+                onClick={() => { if (calMonth === 0) { setCalMonth(11); setCalYear((y) => y - 1); } else setCalMonth((m) => m - 1); }}
+                style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #e8e8f0", background: "#fafafd", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(5,5,8,0.5)", flexShrink: 0 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6" /></svg>
+              </button>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#050508", minWidth: 70, textAlign: "center" }}>{MONTHS[calMonth].slice(0, 3)}</span>
+              <button type="button"
+                onClick={() => { if (calMonth === 11) { setCalMonth(0); setCalYear((y) => y + 1); } else setCalMonth((m) => m + 1); }}
+                style={{ width: 28, height: 28, borderRadius: 7, border: "1px solid #e8e8f0", background: "#fafafd", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(5,5,8,0.5)", flexShrink: 0 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }}>
+            {["Su","Mo","Tu","We","Th","Fr","Sa"].map((d) => (
+              <div key={d} style={{ textAlign: "center", fontSize: 11, fontWeight: 600, color: "rgba(5,5,8,0.35)", paddingBottom: 4 }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Day grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+            {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`empty-${i}`} />)}
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+              const isSelected = Number(dd) === day && Number(mm) === calMonth + 1 && Number(yyyy) === calYear;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => pickCalDay(day)}
+                  style={{
+                    width: "100%", aspectRatio: "1", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: isSelected ? 700 : 400,
+                    background: isSelected ? "#0004E8" : "transparent",
+                    color: isSelected ? "#fff" : "#050508",
+                    transition: "background 0.12s",
+                  }}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(0,4,232,0.08)"; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Reusable PDF upload zone ───────────────────────────────────────────────────
 interface UploadZoneProps {
@@ -199,7 +484,13 @@ export default function NewClaimPage() {
             <div><FieldLabel>First Name *</FieldLabel><input className={inputClass} style={inputStyle} placeholder="e.g. Khalid" value={form.patientFName} onChange={setField("patientFName")} /></div>
             <div><FieldLabel>Last Name *</FieldLabel><input className={inputClass} style={inputStyle} placeholder="e.g. Al-Mansouri" value={form.patientLName} onChange={setField("patientLName")} /></div>
           </div>
-          <div><FieldLabel>Date of Birth *</FieldLabel><input type="date" className={inputClass} style={inputStyle} value={form.patientDOB} onChange={setField("patientDOB")} /></div>
+          <div>
+            <FieldLabel>Date of Birth *</FieldLabel>
+            <DatePickerInput
+              value={form.patientDOB}
+              onChange={(v) => setForm((p) => ({ ...p, patientDOB: v }))}
+            />
+          </div>
         </div>
 
         {/* Claim details section */}
