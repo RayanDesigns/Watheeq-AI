@@ -10,6 +10,7 @@ Runs as a FastAPI BackgroundTask:
   6. Cache the full analysis record for the GET endpoint
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -31,8 +32,11 @@ logger = logging.getLogger(__name__)
 
 
 async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> None:
-    """Background task: full analysis pipeline. Updates the in-memory cache as it progresses
-    and publishes live progress events on the broker so the UI can stream them."""
+    """Background task: full analysis pipeline with configurable timeout.
+
+    Updates the in-memory cache as it progresses and publishes live progress
+    events on the broker so the UI can stream them.
+    """
     started = time.time()
     claim_id = request.claim_id
 
@@ -48,6 +52,7 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         "confidence_score": None,
         "applicable_clauses": None,
         "reasoning": None,
+        "rejection_reasons": None,
         "flags": None,
         "draft_response": None,
         "processing_time_seconds": None,
@@ -62,6 +67,26 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
         "step": "started",
         "message": "Starting AI analysis…",
     })
+
+    try:
+        await asyncio.wait_for(
+            _run_pipeline(analysis_id, request, record, started),
+            timeout=settings.ANALYSIS_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        _fail(record, claim_id, started, f"Analysis timed out after {settings.ANALYSIS_TIMEOUT_SECONDS} seconds")
+    except Exception as e:
+        _fail(record, claim_id, started, f"Unexpected error: {e}")
+
+
+async def _run_pipeline(
+    analysis_id: str,
+    request: AnalysisTriggerRequest,
+    record: dict,
+    started: float,
+) -> None:
+    """Inner pipeline — separated so the asyncio.wait_for timeout can cancel it cleanly."""
+    claim_id = request.claim_id
 
     try:
         claim_doc = store.get_claim(claim_id)
@@ -154,6 +179,7 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
                 "confidence_score": parsed["confidence_score"],
                 "applicable_clauses": parsed["applicable_clauses"],
                 "reasoning": parsed["reasoning"],
+                "rejection_reasons": parsed["rejection_reasons"],
                 "flags": parsed["flags"],
             },
         })
@@ -172,6 +198,7 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
             reasoning=parsed["reasoning"],
             applicable_clauses=parsed["applicable_clauses"],
             flags=parsed["flags"],
+            rejection_reasons=parsed["rejection_reasons"],
         )
 
         # Step 6: persist + cache
@@ -193,6 +220,7 @@ async def run_analysis(analysis_id: str, request: AnalysisTriggerRequest) -> Non
             "confidence_score": parsed["confidence_score"],
             "applicable_clauses": parsed["applicable_clauses"],
             "reasoning": parsed["reasoning"],
+            "rejection_reasons": parsed["rejection_reasons"],
             "flags": parsed["flags"],
             "draft_response": draft_text,
             "processing_time_seconds": elapsed,
@@ -248,6 +276,11 @@ def _validate_llm_response(response: dict) -> dict:
         if isinstance(c, dict)
     ]
 
+    rejection_reasons = response.get("rejection_reasons") or []
+    if not isinstance(rejection_reasons, list):
+        rejection_reasons = []
+    rejection_reasons = [str(r) for r in rejection_reasons if r]
+
     flags = response.get("flags") or []
     if not isinstance(flags, list):
         flags = []
@@ -257,6 +290,7 @@ def _validate_llm_response(response: dict) -> dict:
         "confidence_score": confidence,
         "applicable_clauses": clauses,
         "reasoning": response.get("reasoning") or "No reasoning provided",
+        "rejection_reasons": rejection_reasons,
         "flags": flags,
     }
 

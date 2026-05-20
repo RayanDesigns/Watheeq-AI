@@ -54,6 +54,7 @@ class AnalysisResultResponse(BaseModel):
     confidence_score: Optional[float] = None
     applicable_clauses: Optional[List[ApplicableClause]] = None
     reasoning: Optional[str] = None
+    rejection_reasons: Optional[List[str]] = None
     flags: Optional[List[str]] = None
     draft_response: Optional[str] = None
     ai_model_used: Optional[str] = None

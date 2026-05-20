@@ -30,6 +30,7 @@ async def generate_draft(
     reasoning: str,
     applicable_clauses: list,
     flags: list,
+    rejection_reasons: list = None,
 ) -> str:
     """Produce a draft response. Hardcoded for 'covered'; streamed AI text for 'not_covered'."""
     logger.info(f"Generating draft for claim {claim_id} (decision={coverage_decision})")
@@ -46,6 +47,7 @@ async def generate_draft(
             reasoning=reasoning,
             applicable_clauses=applicable_clauses,
             flags=flags,
+            rejection_reasons=rejection_reasons,
         )
         try:
             draft_text = await llm_service.stream_text(

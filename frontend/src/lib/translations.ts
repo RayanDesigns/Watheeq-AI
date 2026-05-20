@@ -182,6 +182,7 @@ export const translations: Record<string, Record<Lang, string>> = {
   confidenceTitle:      { en: "Confidence",              ar: "مستوى الثقة" },
   aiReasoningTitle:     { en: "AI Reasoning",            ar: "تبرير الذكاء الاصطناعي" },
   citedPolicyTitle:     { en: "Cited Policy Clauses",    ar: "بنود وثيقة التأمين المُستند إليها" },
+  rejectionReasonsTitle: { en: "Hard Rejection Rules Triggered", ar: "قواعد الرفض الصارمة المُفعَّلة" },
   flagsManualReviewTitle:{ en: "Flags for Manual Review",  ar: "تنبيهات للمراجعة اليدوية" },
   aiAssistedDisclaimer: { en: "AI-assisted analysis. Review the cited clauses and adjust the response below before submitting your decision.", ar: "تحليل مدعوم بالذكاء الاصطناعي. يرجى مراجعة البنود المستند إليها وتعديل الرد أدناه قبل تقديم قرارك." },
   aiDraftResponseTitle: { en: "AI Draft Response (editable)", ar: "مسودة رد الذكاء الاصطناعي (قابلة للتعديل)" },

@@ -45,6 +45,7 @@ interface AIAnalysis {
   confidence_score: number | null;
   applicable_clauses: AIClause[] | null;
   reasoning: string | null;
+  rejection_reasons: string[] | null;
   flags: string[] | null;
   draft_response: string | null;
   error_message: string | null;
@@ -197,6 +198,7 @@ export default function ExaminerClaimDetailPage() {
         confidence_score: null,
         applicable_clauses: null,
         reasoning: claim.aiMessage ?? null,
+        rejection_reasons: null,
         flags: null,
         draft_response: claim.aiDraft ?? null,
         error_message: null,
@@ -231,7 +233,7 @@ export default function ExaminerClaimDetailPage() {
           setAI((prev) => prev ?? {
             status: "processing",
             coverage_decision: null, confidence_score: null,
-            applicable_clauses: null, reasoning: null, flags: null,
+            applicable_clauses: null, reasoning: null, rejection_reasons: null, flags: null,
             draft_response: null, error_message: null,
           });
           break;
@@ -249,7 +251,7 @@ export default function ExaminerClaimDetailPage() {
           setAI((prev) => ({
             ...(prev ?? {
               status: "processing", coverage_decision: null, confidence_score: null,
-              applicable_clauses: null, reasoning: null, flags: null,
+              applicable_clauses: null, reasoning: null, rejection_reasons: null, flags: null,
               draft_response: null, error_message: null,
             }),
             status: "processing",
@@ -257,6 +259,7 @@ export default function ExaminerClaimDetailPage() {
             confidence_score: data.confidence_score ?? null,
             applicable_clauses: data.applicable_clauses ?? null,
             reasoning: data.reasoning ?? null,
+            rejection_reasons: data.rejection_reasons ?? null,
             flags: data.flags ?? null,
           }));
           break;
@@ -278,6 +281,7 @@ export default function ExaminerClaimDetailPage() {
             confidence_score: data.confidence_score ?? null,
             applicable_clauses: data.applicable_clauses ?? null,
             reasoning: data.reasoning ?? null,
+            rejection_reasons: data.rejection_reasons ?? null,
             flags: data.flags ?? null,
             draft_response: data.draft_response ?? null,
             error_message: null,
@@ -298,7 +302,7 @@ export default function ExaminerClaimDetailPage() {
           setAI((prev) => ({
             ...(prev ?? {
               coverage_decision: null, confidence_score: null,
-              applicable_clauses: null, reasoning: null, flags: null,
+              applicable_clauses: null, reasoning: null, rejection_reasons: null, flags: null,
               draft_response: null,
             }),
             status: "failed",
@@ -306,6 +310,7 @@ export default function ExaminerClaimDetailPage() {
             confidence_score: prev?.confidence_score ?? null,
             applicable_clauses: prev?.applicable_clauses ?? null,
             reasoning: prev?.reasoning ?? null,
+            rejection_reasons: prev?.rejection_reasons ?? null,
             flags: prev?.flags ?? null,
             draft_response: prev?.draft_response ?? null,
             error_message: message,
@@ -327,7 +332,7 @@ export default function ExaminerClaimDetailPage() {
         setAI({
           status: "processing",
           coverage_decision: null, confidence_score: null,
-          applicable_clauses: null, reasoning: null, flags: null,
+          applicable_clauses: null, reasoning: null, rejection_reasons: null, flags: null,
           draft_response: null, error_message: null,
         });
 
@@ -440,6 +445,7 @@ export default function ExaminerClaimDetailPage() {
         confidence_score: null,
         applicable_clauses: null,
         reasoning: null,
+        rejection_reasons: null,
         flags: null,
         draft_response: null,
         error_message: null,
@@ -757,6 +763,19 @@ export default function ExaminerClaimDetailPage() {
                           <p className="text-[13px] mb-1.5" style={{ color: "#050508" }}>&ldquo;{c.clause_text}&rdquo;</p>
                           <p className="text-[12px]" style={{ color: "rgba(5,5,8,0.55)" }}>{c.relevance}</p>
                         </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {ai.rejection_reasons && ai.rejection_reasons.length > 0 && (
+                  <div className="mb-5 rounded-xl p-3" style={{ background: "rgba(220,38,38,0.05)", border: "1px solid rgba(220,38,38,0.15)" }}>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest mb-2" style={{ color: "#dc2626" }}>
+                      {t("rejectionReasonsTitle")}
+                    </p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {ai.rejection_reasons.map((r, i) => (
+                        <li key={i} className="text-[13px]" style={{ color: "#dc2626" }}>{r}</li>
                       ))}
                     </ul>
                   </div>
